@@ -79,6 +79,13 @@
   .card.correct { animation: flashGreen 0.35s ease; }
   .card.wrong { animation: flashRed 0.35s ease; }
   .card.gone { opacity: 0; pointer-events: none; transform: scale(0.8); }
+  .card.matched {
+    background: #e5e5e5 !important;
+    color: #afafaf;
+    cursor: default;
+    box-shadow: none;
+    transform: none;
+  }
   .card.empty { visibility: hidden; pointer-events: none; box-shadow: none; }
   @keyframes flashGreen {
     0% { background: #58CC02; }
@@ -259,7 +266,7 @@
   }
 
   // ---------- Game state ----------
-  var BOARD_SIZE = 6;
+  var CYCLE_SIZE = 5;
   var START_TIME = 45;
   var TIME_BONUS = 3;
   var TIME_PENALTY = 3;
@@ -295,7 +302,8 @@
     poolQueue: [],
     idCounter: 0,
     usedWords: [], // words used this whole game session {en, ru}
-    board: [], // current board entries: {id, en, ru, matched}
+    board: [], // current cycle entries: {id, en, ru, matched}
+    rightOrder: [], // ids in shuffled order, fixed for the current cycle
     selectedLeft: null,
     selectedRight: null,
     busy: false,
@@ -336,8 +344,8 @@
 
   function startGame() {
     var pool = getActiveWordPool();
-    if (pool.length < BOARD_SIZE) {
-      alert("Нужно минимум " + BOARD_SIZE + " слов в базе, чтобы начать игру. Сейчас: " + pool.length);
+    if (pool.length < CYCLE_SIZE) {
+      alert("Нужно минимум " + CYCLE_SIZE + " слов в базе, чтобы начать игру. Сейчас: " + pool.length);
       return;
     }
     state.poolQueue = shuffle(pool);
@@ -346,29 +354,42 @@
     state.score = 0;
     state.matchedCount = 0;
     state.usedWords = [];
-    state.board = [];
     state.selectedLeft = null;
     state.selectedRight = null;
     state.busy = false;
     state.screen = "playing";
 
-    var initialCount = Math.min(BOARD_SIZE, state.poolQueue.length);
-    for (var i = 0; i < initialCount; i++) {
-      addCardToBoard();
-    }
-
+    startCycle();
     render();
     startTimer();
   }
 
   // ---------- PLAYING ----------
-  function addCardToBoard() {
-    var w = state.poolQueue.shift();
-    if (!w) return false;
-    var already = state.usedWords.some(function (u) { return u.en === w.en; });
-    if (!already) state.usedWords.push(w);
-    state.board.push({ id: state.idCounter++, en: w.en, ru: w.ru, matched: false });
-    return true;
+  function nextWordsFromPool(count) {
+    var activePool = getActiveWordPool();
+    var words = [];
+    for (var i = 0; i < count; i++) {
+      if (state.poolQueue.length === 0) {
+        state.poolQueue = shuffle(activePool);
+      }
+      words.push(state.poolQueue.shift());
+    }
+    return words;
+  }
+
+  function startCycle() {
+    var words = nextWordsFromPool(CYCLE_SIZE);
+    words.forEach(function (w) {
+      var already = state.usedWords.some(function (u) { return u.en === w.en; });
+      if (!already) state.usedWords.push(w);
+    });
+    state.board = words.map(function (w) {
+      return { id: state.idCounter++, en: w.en, ru: w.ru, matched: false };
+    });
+    state.rightOrder = shuffle(state.board.map(function (c) { return c.id; }));
+    state.selectedLeft = null;
+    state.selectedRight = null;
+    state.busy = false;
   }
 
   function startTimer() {
@@ -406,14 +427,15 @@
   }
 
   function renderPlaying() {
-    var leftItems = state.board.filter(function (c) { return !c.matched; });
-    var rightItems = shuffleStable(state.board.filter(function (c) { return !c.matched; }));
+    var byId = {};
+    state.board.forEach(function (c) { byId[c.id] = c; });
+    var rightItems = state.rightOrder.map(function (id) { return byId[id]; });
 
-    var leftHtml = leftItems.map(function (c) {
-      return '<button class="card en" data-side="left" data-id="' + c.id + '">' + escapeHtml(c.en) + '</button>';
+    var leftHtml = state.board.map(function (c) {
+      return '<button class="card en' + (c.matched ? ' matched' : '') + '" data-side="left" data-id="' + c.id + '"' + (c.matched ? ' disabled' : '') + '>' + escapeHtml(c.en) + '</button>';
     }).join("");
     var rightHtml = rightItems.map(function (c) {
-      return '<button class="card ru" data-side="right" data-id="' + c.id + '">' + escapeHtml(c.ru) + '</button>';
+      return '<button class="card ru' + (c.matched ? ' matched' : '') + '" data-side="right" data-id="' + c.id + '"' + (c.matched ? ' disabled' : '') + '>' + escapeHtml(c.ru) + '</button>';
     }).join("");
 
     app.innerHTML =
@@ -434,23 +456,6 @@
     });
   }
 
-  // keep right column order stable across re-renders within the same round
-  var _rightOrderCache = null;
-  var _rightOrderRoundKey = null;
-  function shuffleStable(items) {
-    var key = state.board.map(function (c) { return c.id; }).join(",");
-    if (_rightOrderRoundKey !== key) {
-      _rightOrderCache = shuffle(items.map(function (c) { return c.id; }));
-      _rightOrderRoundKey = key;
-    }
-    var order = _rightOrderCache.filter(function (id) {
-      return items.some(function (c) { return c.id === id; });
-    });
-    return order.map(function (id) {
-      return items.filter(function (c) { return c.id === id; })[0];
-    });
-  }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -460,6 +465,7 @@
   function onCardClick(e) {
     if (state.busy) return;
     var btn = e.currentTarget;
+    if (btn.classList.contains("matched")) return;
     var side = btn.getAttribute("data-side");
     var id = parseInt(btn.getAttribute("data-id"), 10);
 
@@ -494,22 +500,23 @@
       updateTimerDisplay();
       updateScoreDisplay();
       setTimeout(function () {
-        leftBtn.classList.add("gone");
-        rightBtn.classList.add("gone");
-        setTimeout(function () {
-          state.board = state.board.filter(function (c) { return c.id !== leftId; });
-          state.selectedLeft = null;
-          state.selectedRight = null;
-          state.busy = false;
-          addCardToBoard();
-          if (state.board.length === 0) {
-            state.gameOverReason = "complete";
-            endGame();
-          } else {
+        var item = state.board.filter(function (c) { return c.id === leftId; })[0];
+        if (item) item.matched = true;
+        state.selectedLeft = null;
+        state.selectedRight = null;
+        state.busy = false;
+
+        var allMatched = state.board.every(function (c) { return c.matched; });
+        if (allMatched) {
+          render();
+          setTimeout(function () {
+            startCycle();
             render();
-          }
-        }, 220);
-      }, 180);
+          }, 400);
+        } else {
+          render();
+        }
+      }, 350);
     } else {
       state.score = Math.max(0, state.score - SCORE_WRONG);
       state.timeLeft = Math.max(0, state.timeLeft - TIME_PENALTY);
