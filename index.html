@@ -259,20 +259,41 @@
   }
 
   // ---------- Game state ----------
-  var ROUNDS = [5, 8, 12];
+  var BOARD_SIZE = 6;
   var START_TIME = 45;
   var TIME_BONUS = 3;
   var TIME_PENALTY = 3;
   var SCORE_CORRECT = 10;
   var SCORE_WRONG = 5;
 
+  var LS_RECORD = "mm_best_record";
+
+  function loadRecord() {
+    try { return JSON.parse(localStorage.getItem(LS_RECORD) || "null"); } catch (e) { return null; }
+  }
+  function saveRecord(rec) {
+    localStorage.setItem(LS_RECORD, JSON.stringify(rec));
+  }
+  function pluralWords(n) {
+    var n10 = n % 10, n100 = n % 100;
+    if (n10 === 1 && n100 !== 11) return n + " слово";
+    if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return n + " слова";
+    return n + " слов";
+  }
+  function formatDateTime(d) {
+    var pad = function (n) { return n < 10 ? "0" + n : "" + n; };
+    return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear() +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
   var state = {
-    screen: "home", // home, playing, roundComplete, gameOver, settings
-    roundIndex: 0,
+    screen: "home", // home, playing, gameOver, settings
     timeLeft: START_TIME,
     score: 0,
+    matchedCount: 0,
     timerHandle: null,
-    poolForGame: [],
+    poolQueue: [],
+    idCounter: 0,
     usedWords: [], // words used this whole game session {en, ru}
     board: [], // current board entries: {id, en, ru, matched}
     selectedLeft: null,
@@ -286,7 +307,6 @@
   function render() {
     if (state.screen === "home") return renderHome();
     if (state.screen === "playing") return renderPlaying();
-    if (state.screen === "roundComplete") return renderRoundComplete();
     if (state.screen === "gameOver") return renderGameOver();
     if (state.screen === "settings") return renderSettings();
   }
@@ -294,10 +314,15 @@
   // ---------- HOME ----------
   function renderHome() {
     var pool = getActiveWordPool();
+    var record = loadRecord();
+    var recordHtml = record
+      ? '<div class="stat-line">Рекорд: ' + pluralWords(record.matched) + ' (' + record.date + ')</div>'
+      : '<div class="stat-line">Рекордов пока нет - сыграй первую игру</div>';
     app.innerHTML =
       '<div class="screen">' +
         '<h1>Match Madness</h1>' +
         '<p>Собери пары слов на скорость. Правильный ответ - время и очки. Ошибка - минус время.</p>' +
+        recordHtml +
         '<div class="stat-line">Слов в игре: ' + pool.length + '</div>' +
         '<button class="btn" id="startBtn">Начать</button>' +
         '<button class="btn secondary" id="settingsBtn">Настройки слов</button>' +
@@ -311,53 +336,39 @@
 
   function startGame() {
     var pool = getActiveWordPool();
-    if (pool.length < 5) {
-      alert("Нужно минимум 5 слов в базе, чтобы начать игру. Сейчас: " + pool.length);
+    if (pool.length < BOARD_SIZE) {
+      alert("Нужно минимум " + BOARD_SIZE + " слов в базе, чтобы начать игру. Сейчас: " + pool.length);
       return;
     }
-    var totalNeeded = ROUNDS.reduce(function (a, b) { return a + b; }, 0);
-    var count = Math.min(totalNeeded, pool.length);
-    state.poolForGame = shuffle(pool).slice(0, count);
-    state.roundIndex = 0;
+    state.poolQueue = shuffle(pool);
+    state.idCounter = 0;
     state.timeLeft = START_TIME;
     state.score = 0;
+    state.matchedCount = 0;
     state.usedWords = [];
-    state.screen = "playing";
-    startRound();
-  }
-
-  // ---------- PLAYING ----------
-  function currentRoundPairCount() {
-    var idx = Math.min(state.roundIndex, ROUNDS.length - 1);
-    return ROUNDS[idx];
-  }
-
-  function startRound() {
-    var count = currentRoundPairCount();
-    var words = [];
-    for (var i = 0; i < count; i++) {
-      var w = state.poolForGame.shift();
-      if (!w) break;
-      words.push(w);
-    }
-    if (words.length === 0) {
-      endGame();
-      return;
-    }
-    words.forEach(function (w) {
-      var already = state.usedWords.some(function (u) { return u.en === w.en; });
-      if (!already) state.usedWords.push(w);
-    });
-
-    state.board = words.map(function (w, i) {
-      return { id: i, en: w.en, ru: w.ru, matched: false };
-    });
+    state.board = [];
     state.selectedLeft = null;
     state.selectedRight = null;
     state.busy = false;
+    state.screen = "playing";
+
+    var initialCount = Math.min(BOARD_SIZE, state.poolQueue.length);
+    for (var i = 0; i < initialCount; i++) {
+      addCardToBoard();
+    }
 
     render();
     startTimer();
+  }
+
+  // ---------- PLAYING ----------
+  function addCardToBoard() {
+    var w = state.poolQueue.shift();
+    if (!w) return false;
+    var already = state.usedWords.some(function (u) { return u.en === w.en; });
+    if (!already) state.usedWords.push(w);
+    state.board.push({ id: state.idCounter++, en: w.en, ru: w.ru, matched: false });
+    return true;
   }
 
   function startTimer() {
@@ -390,9 +401,8 @@
   }
 
   function timeUp() {
-    state.screen = "gameOver";
     state.gameOverReason = "time";
-    render();
+    endGame();
   }
 
   function renderPlaying() {
@@ -411,7 +421,7 @@
         '<div class="timer" id="timerDisplay"></div>' +
         '<div class="score" id="scoreDisplay">' + state.score + ' очк.</div>' +
       '</div>' +
-      '<div class="round-label">Раунд ' + (state.roundIndex + 1) + ' из ' + ROUNDS.length + '</div>' +
+      '<div class="round-label">Смэтчено: ' + state.matchedCount + '</div>' +
       '<div class="board">' +
         '<div class="col" id="colLeft">' + leftHtml + '</div>' +
         '<div class="col" id="colRight">' + rightHtml + '</div>' +
@@ -428,7 +438,7 @@
   var _rightOrderCache = null;
   var _rightOrderRoundKey = null;
   function shuffleStable(items) {
-    var key = state.roundIndex + "_" + state.board.map(function (c) { return c.id; }).join(",");
+    var key = state.board.map(function (c) { return c.id; }).join(",");
     if (_rightOrderRoundKey !== key) {
       _rightOrderCache = shuffle(items.map(function (c) { return c.id; }));
       _rightOrderRoundKey = key;
@@ -477,6 +487,7 @@
 
     if (isMatch) {
       state.score += SCORE_CORRECT;
+      state.matchedCount += 1;
       state.timeLeft += TIME_BONUS;
       leftBtn.classList.add("correct");
       rightBtn.classList.add("correct");
@@ -486,14 +497,14 @@
         leftBtn.classList.add("gone");
         rightBtn.classList.add("gone");
         setTimeout(function () {
-          var item = state.board.filter(function (c) { return c.id === leftId; })[0];
-          if (item) item.matched = true;
+          state.board = state.board.filter(function (c) { return c.id !== leftId; });
           state.selectedLeft = null;
           state.selectedRight = null;
           state.busy = false;
-          var remaining = state.board.filter(function (c) { return !c.matched; });
-          if (remaining.length === 0) {
-            roundComplete();
+          addCardToBoard();
+          if (state.board.length === 0) {
+            state.gameOverReason = "complete";
+            endGame();
           } else {
             render();
           }
@@ -528,33 +539,16 @@
     if (el) el.textContent = state.score + " очк.";
   }
 
-  function roundComplete() {
-    stopTimer();
-    if (state.roundIndex >= ROUNDS.length - 1) {
-      endGame();
-      return;
-    }
-    state.screen = "roundComplete";
-    render();
-  }
-
-  function renderRoundComplete() {
-    app.innerHTML =
-      '<div class="screen">' +
-        '<h2>Раунд ' + (state.roundIndex + 1) + ' завершён!</h2>' +
-        '<div class="big-score">' + state.score + '</div>' +
-        '<p>очков набрано</p>' +
-        '<button class="btn" id="continueBtn">Продолжить</button>' +
-      '</div>';
-    document.getElementById("continueBtn").onclick = function () {
-      state.roundIndex += 1;
-      startRound();
-    };
-  }
-
   function endGame() {
     stopTimer();
     state.screen = "gameOver";
+
+    var record = loadRecord();
+    state.isNewRecord = !record || state.matchedCount > record.matched;
+    if (state.isNewRecord) {
+      saveRecord({ matched: state.matchedCount, date: formatDateTime(new Date()) });
+    }
+
     render();
   }
 
@@ -574,7 +568,8 @@
       '<div class="screen">' +
         '<h1>' + reason + '</h1>' +
         '<div class="big-score">' + state.score + '</div>' +
-        '<p>итоговый счёт</p>' +
+        '<p>итоговый счёт - замэчено ' + pluralWords(state.matchedCount) + '</p>' +
+        (state.isNewRecord ? '<p style="color:#58CC02;font-weight:800;">Новый рекорд!</p>' : '') +
         (usedWords.length ? (
           '<p style="margin-top:8px;">Отметь слова, которые не зашли - они больше не будут появляться:</p>' +
           '<div class="reject-list">' + listHtml + '</div>'
