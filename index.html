@@ -246,13 +246,27 @@
     localStorage.setItem(LS_REJECTED, JSON.stringify(list));
   }
 
+  var LS_SOURCE_MODE = "mm_source_mode";
+  function loadSourceMode() {
+    var m = localStorage.getItem(LS_SOURCE_MODE);
+    return (m === "custom" || m === "system") ? m : "all";
+  }
+  function saveSourceMode(m) {
+    localStorage.setItem(LS_SOURCE_MODE, m);
+  }
+
   function getActiveWordPool() {
     var rejected = loadRejected();
     var rejectedKeys = {};
     rejected.forEach(function (w) { rejectedKeys[w.en.toLowerCase()] = true; });
 
     var custom = loadCustomWords();
-    var all = SYSTEM_WORDS.concat(custom);
+    var mode = loadSourceMode();
+    var all;
+    if (mode === "custom") all = custom;
+    else if (mode === "system") all = SYSTEM_WORDS;
+    else all = SYSTEM_WORDS.concat(custom);
+
     return all.filter(function (w) { return !rejectedKeys[w.en.toLowerCase()]; });
   }
 
@@ -321,20 +335,41 @@
 
   // ---------- HOME ----------
   function renderHome() {
-    var pool = getActiveWordPool();
     var record = loadRecord();
     var recordHtml = record
       ? '<div class="stat-line">Рекорд: ' + pluralWords(record.matched) + ' (' + record.date + ')</div>'
       : '<div class="stat-line">Рекордов пока нет - сыграй первую игру</div>';
+
+    var mode = loadSourceMode();
+    var customCount = loadCustomWords().length;
+
+    var modeTabsHtml =
+      '<div class="tabs" style="max-width:280px;width:100%;">' +
+        '<button data-mode="all" class="' + (mode === "all" ? "active" : "") + '">Все</button>' +
+        '<button data-mode="system" class="' + (mode === "system" ? "active" : "") + '">База (' + SYSTEM_WORDS.length + ')</button>' +
+        '<button data-mode="custom" class="' + (mode === "custom" ? "active" : "") + '">Мои (' + customCount + ')</button>' +
+      '</div>';
+
+    var pool = getActiveWordPool();
+
     app.innerHTML =
       '<div class="screen">' +
         '<h1>Match Madness</h1>' +
         '<p>Собери пары слов на скорость. Правильный ответ - время и очки. Ошибка - минус время.</p>' +
         recordHtml +
-        '<div class="stat-line">Слов в игре: ' + pool.length + '</div>' +
+        modeTabsHtml +
+        '<div class="stat-line" id="poolCountLine">Слов в игре: ' + pool.length + '</div>' +
         '<button class="btn" id="startBtn">Начать</button>' +
         '<button class="btn secondary" id="settingsBtn">Настройки слов</button>' +
       '</div>';
+
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (btn) {
+      btn.onclick = function () {
+        saveSourceMode(btn.getAttribute("data-mode"));
+        render();
+      };
+    });
+
     document.getElementById("startBtn").onclick = startGame;
     document.getElementById("settingsBtn").onclick = function () {
       state.screen = "settings";
