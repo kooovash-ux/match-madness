@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Match Madness</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #ffffff;
+    color: #4b4b4b;
+    min-height: 100vh;
+  }
+  .app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .timer {
+    font-size: 28px;
+    font-weight: 800;
+    color: #58CC02;
+    transition: color 0.2s;
+  }
+  .timer.low { color: #FF4B4B; }
+  .score {
+    font-size: 20px;
+    font-weight: 700;
+    color: #4b4b4b;
+  }
+  .round-label {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #afafaf;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    flex: 1;
+  }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .card {
+    border: none;
+    border-radius: 14px;
+    padding: 16px 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #fff;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.15);
+    transition: transform 0.08s, opacity 0.25s, box-shadow 0.08s;
+    text-align: center;
+    user-select: none;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card.en { background: #1CB0F6; }
+  .card.ru { background: #FF9600; }
+  .card:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.15); }
+  .card.selected { outline: 3px solid #4b4b4b; }
+  .card.correct { animation: flashGreen 0.35s ease; }
+  .card.wrong { animation: flashRed 0.35s ease; }
+  .card.gone { opacity: 0; pointer-events: none; transform: scale(0.8); }
+  .card.empty { visibility: hidden; pointer-events: none; box-shadow: none; }
+  @keyframes flashGreen {
+    0% { background: #58CC02; }
+    100% { background: #58CC02; }
+  }
+  @keyframes flashRed {
+    0% { background: #FF4B4B; }
+    100% { background: #FF4B4B; }
+  }
+
+  .screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 16px;
+    padding: 24px 8px;
+  }
+  .screen h1 { font-size: 26px; margin: 0; color: #4b4b4b; }
+  .screen h2 { font-size: 20px; margin: 0; color: #4b4b4b; }
+  .screen p { margin: 0; color: #777; font-size: 15px; }
+  .big-score { font-size: 48px; font-weight: 800; color: #58CC02; }
+
+  .btn {
+    background: #58CC02;
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 14px 32px;
+    font-size: 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #4aa302;
+    width: 100%;
+    max-width: 280px;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: none; }
+  .btn.secondary {
+    background: #fff;
+    color: #4b4b4b;
+    border: 2px solid #e5e5e5;
+    box-shadow: 0 4px 0 #d0d0d0;
+  }
+  .btn.small { padding: 10px 20px; font-size: 13px; }
+
+  .reject-list {
+    width: 100%;
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .reject-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f7f7f7;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+  .reject-item span { text-align: left; }
+  .reject-item button {
+    background: none;
+    border: 2px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #999;
+  }
+  .reject-item button.marked {
+    background: #FF4B4B;
+    border-color: #FF4B4B;
+    color: #fff;
+  }
+
+  .settings-panel { width: 100%; text-align: left; }
+  .settings-panel h3 { font-size: 15px; margin: 14px 0 6px; color: #4b4b4b; }
+  .settings-panel .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .settings-panel input, .settings-panel textarea {
+    flex: 1;
+    border: 2px solid #e5e5e5;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .settings-panel textarea { width: 100%; min-height: 80px; resize: vertical; }
+  .word-list { max-height: 150px; overflow-y: auto; margin-bottom: 8px; }
+  .word-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+  }
+  .word-row button {
+    background: none;
+    border: none;
+    color: #FF4B4B;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button {
+    flex: 1;
+    padding: 8px;
+    border: 2px solid #e5e5e5;
+    background: #fff;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    color: #999;
+  }
+  .tabs button.active {
+    border-color: #58CC02;
+    color: #58CC02;
+    background: #f0fce6;
+  }
+  .stat-line { font-size: 13px; color: #999; margin-bottom: 6px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Word bank ----------
+  var SYSTEM_WORDS = [{"en": "ability", "ru": "способность"}, {"en": "account", "ru": "счёт"}, {"en": "additional", "ru": "дополнительный"}, {"en": "advanced", "ru": "продвинутый"}, {"en": "advise", "ru": "советовать"}, {"en": "ahead", "ru": "впереди"}, {"en": "alright", "ru": "хорошо"}, {"en": "ancestor", "ru": "предок"}, {"en": "annoy", "ru": "раздражать"}, {"en": "apart", "ru": "отдельно"}, {"en": "apply", "ru": "подавать заявку"}, {"en": "argue", "ru": "спорить"}, {"en": "assistant", "ru": "помощник"}, {"en": "attempt", "ru": "попытка"}, {"en": "author", "ru": "автор"}, {"en": "awful", "ru": "ужасный"}, {"en": "balloon", "ru": "воздушный шар"}, {"en": "basic", "ru": "базовый"}, {"en": "beauty", "ru": "красота"}, {"en": "behavior", "ru": "поведение"}, {"en": "bend", "ru": "сгибать"}, {"en": "blackboard", "ru": "школьная доска"}, {"en": "boil", "ru": "кипятить"}, {"en": "bored", "ru": "скучающий"}, {"en": "branch", "ru": "ветка"}, {"en": "brilliant", "ru": "блестящий"}, {"en": "bush", "ru": "куст"}, {"en": "camping", "ru": "кемпинг"}, {"en": "cassette", "ru": "кассета"}, {"en": "century", "ru": "век"}, {"en": "challenge", "ru": "испытание"}, {"en": "chat", "ru": "болтать"}, {"en": "cheque", "ru": "чек"}, {"en": "chin", "ru": "подбородок"}, {"en": "classic", "ru": "классический"}, {"en": "climbing", "ru": "скалолазание"}, {"en": "cola", "ru": "кола"}, {"en": "commitment", "ru": "обязательство"}, {"en": "comparative", "ru": "сравнительный"}, {"en": "composer", "ru": "композитор"}, {"en": "confused", "ru": "растерянный"}, {"en": "context", "ru": "контекст"}, {"en": "convenient", "ru": "удобный"}, {"en": "count", "ru": "считать"}, {"en": "create", "ru": "создавать"}, {"en": "crime", "ru": "преступление"}, {"en": "crown", "ru": "корона"}, {"en": "customer", "ru": "клиент"}, {"en": "dangerous", "ru": "опасный"}, {"en": "decide", "ru": "решать"}, {"en": "dentist", "ru": "стоматолог"}, {"en": "detail", "ru": "деталь"}, {"en": "diet", "ru": "диета"}, {"en": "director", "ru": "режиссёр"}, {"en": "disco", "ru": "дискотека"}, {"en": "disturb", "ru": "беспокоить"}, {"en": "download", "ru": "скачивать"}, {"en": "drill", "ru": "сверло"}, {"en": "earn", "ru": "зарабатывать"}, {"en": "editor", "ru": "редактор"}, {"en": "electric", "ru": "электрический"}, {"en": "empty", "ru": "пустой"}, {"en": "enough", "ru": "достаточно"}, {"en": "episode", "ru": "эпизод"}, {"en": "establish", "ru": "устанавливать"}, {"en": "exam", "ru": "экзамен"}, {"en": "experience", "ru": "опыт"}, {"en": "expression", "ru": "выражение"}, {"en": "fall", "ru": "падать"}, {"en": "fascinating", "ru": "увлекательный"}, {"en": "feature", "ru": "особенность"}, {"en": "fighter", "ru": "боец"}, {"en": "fit", "ru": "подходящий"}, {"en": "flour", "ru": "мука"}, {"en": "forbid", "ru": "запрещать"}, {"en": "fortunately", "ru": "к счастью"}, {"en": "freeze", "ru": "замерзать"}, {"en": "frightened", "ru": "испуганный"}, {"en": "further", "ru": "дальнейший"}, {"en": "gather", "ru": "собирать"}, {"en": "glove", "ru": "перчатка"}, {"en": "graduate", "ru": "выпускник"}, {"en": "granny", "ru": "бабушка"}, {"en": "guidebook", "ru": "путеводитель"}, {"en": "happily", "ru": "счастливо"}, {"en": "harvest", "ru": "урожай"}, {"en": "heavily", "ru": "тяжело"}, {"en": "hike", "ru": "поход"}, {"en": "honor", "ru": "честь"}, {"en": "hundred", "ru": "сто"}, {"en": "impact", "ru": "воздействие"}, {"en": "improve", "ru": "улучшать"}, {"en": "indicate", "ru": "указывать"}, {"en": "insect", "ru": "насекомое"}, {"en": "intelligent", "ru": "умный"}, {"en": "invite", "ru": "приглашать"}, {"en": "journey", "ru": "путешествие"}, {"en": "kilogram", "ru": "килограмм"}, {"en": "knowledge", "ru": "знание"}, {"en": "landscape", "ru": "пейзаж"}, {"en": "law", "ru": "закон"}, {"en": "leather", "ru": "кожа"}, {"en": "level", "ru": "уровень"}, {"en": "lip", "ru": "губа"}, {"en": "logical", "ru": "логичный"}, {"en": "low", "ru": "низкий"}, {"en": "mainly", "ru": "в основном"}, {"en": "manager", "ru": "менеджер"}, {"en": "marvelous", "ru": "чудесный"}, {"en": "melon", "ru": "дыня"}, {"en": "method", "ru": "метод"}, {"en": "mirror", "ru": "зеркало"}, {"en": "mood", "ru": "настроение"}, {"en": "museum", "ru": "музей"}, {"en": "napkin", "ru": "салфетка"}, {"en": "nearly", "ru": "почти"}, {"en": "nobody", "ru": "никто"}, {"en": "noun", "ru": "существительное"}, {"en": "official", "ru": "официальный"}, {"en": "operate", "ru": "работать"}, {"en": "organized", "ru": "организованный"}, {"en": "overweight", "ru": "с лишним весом"}, {"en": "panic", "ru": "паника"}, {"en": "pasta", "ru": "паста"}, {"en": "pence", "ru": "пенсы"}, {"en": "performance", "ru": "выступление"}, {"en": "petrol", "ru": "бензин"}, {"en": "pile", "ru": "куча"}, {"en": "plant", "ru": "растение"}, {"en": "pleased", "ru": "довольный"}, {"en": "policeman", "ru": "полицейский"}, {"en": "population", "ru": "население"}, {"en": "power", "ru": "сила"}, {"en": "prepare", "ru": "готовить"}, {"en": "print", "ru": "печатать"}, {"en": "product", "ru": "продукт"}, {"en": "pronunciation", "ru": "произношение"}, {"en": "pull", "ru": "тянуть"}, {"en": "quick", "ru": "быстрый"}, {"en": "raincoat", "ru": "плащ"}, {"en": "rating", "ru": "рейтинг"}, {"en": "receive", "ru": "получать"}, {"en": "refer", "ru": "ссылаться"}, {"en": "relax", "ru": "расслабляться"}, {"en": "rent", "ru": "аренда"}, {"en": "request", "ru": "запрос"}, {"en": "reunion", "ru": "встреча выпускников"}, {"en": "robbery", "ru": "ограбление"}, {"en": "roof", "ru": "крыша"}, {"en": "royal", "ru": "королевский"}, {"en": "rush", "ru": "спешить"}, {"en": "salt", "ru": "соль"}, {"en": "scale", "ru": "шкала"}, {"en": "schoolwork", "ru": "школьная работа"}, {"en": "script", "ru": "сценарий"}, {"en": "seed", "ru": "семя"}, {"en": "sense", "ru": "чувство"}, {"en": "shade", "ru": "тень"}, {"en": "shine", "ru": "сиять"}, {"en": "shut", "ru": "закрытый"}, {"en": "silver", "ru": "серебряный"}, {"en": "single", "ru": "одинокий"}, {"en": "skating", "ru": "катание на коньках"}, {"en": "slice", "ru": "ломтик"}, {"en": "snack", "ru": "перекус"}, {"en": "soft", "ru": "мягкий"}, {"en": "someday", "ru": "когда-нибудь"}, {"en": "spaceship", "ru": "космический корабль"}, {"en": "splash", "ru": "плеск"}, {"en": "staff", "ru": "персонал"}, {"en": "steak", "ru": "стейк"}, {"en": "stranger", "ru": "незнакомец"}, {"en": "structure", "ru": "структура"}, {"en": "such", "ru": "такой"}, {"en": "summary", "ru": "резюме"}, {"en": "supper", "ru": "ужин"}, {"en": "surprising", "ru": "удивительный"}, {"en": "swimsuit", "ru": "купальник"}, {"en": "tap", "ru": "кран"}, {"en": "teenager", "ru": "подросток"}, {"en": "theirs", "ru": "их"}, {"en": "though", "ru": "хотя"}, {"en": "tights", "ru": "колготки"}, {"en": "toe", "ru": "палец ноги"}, {"en": "toward", "ru": "по направлению к"}, {"en": "training", "ru": "тренировка"}, {"en": "trouble", "ru": "проблема"}, {"en": "uncertain", "ru": "неопределённый"}, {"en": "unforgettable", "ru": "незабываемый"}, {"en": "unit", "ru": "единица"}, {"en": "unusual", "ru": "необычный"}, {"en": "usual", "ru": "обычный"}, {"en": "violent", "ru": "жестокий"}, {"en": "wallet", "ru": "кошелёк"}, {"en": "website", "ru": "веб-сайт"}, {"en": "weight", "ru": "вес"}, {"en": "whole", "ru": "целый"}, {"en": "wine", "ru": "вино"}, {"en": "wonder", "ru": "удивляться"}, {"en": "worse", "ru": "хуже"}, {"en": "abandon", "ru": "покидать"}, {"en": "absent", "ru": "отсутствующий"}, {"en": "academic", "ru": "академический"}, {"en": "accidental", "ru": "случайный"}, {"en": "accurately", "ru": "точно"}, {"en": "acquaintance", "ru": "знакомый"}, {"en": "admiration", "ru": "восхищение"}, {"en": "advert", "ru": "реклама"}, {"en": "afterward", "ru": "потом"}, {"en": "aid", "ru": "помощь"}, {"en": "allergic", "ru": "аллергический"}, {"en": "amazing", "ru": "потрясающий"}, {"en": "anger", "ru": "гнев"}, {"en": "annoyed", "ru": "раздражённый"}, {"en": "anxiety", "ru": "тревога"}, {"en": "appetite", "ru": "аппетит"}, {"en": "approval", "ru": "одобрение"}, {"en": "arrange", "ru": "организовывать"}, {"en": "ashamed", "ru": "стыдящийся"}, {"en": "assist", "ru": "помогать"}, {"en": "atmosphere", "ru": "атмосфера"}, {"en": "attraction", "ru": "привлекательность"}, {"en": "awesome", "ru": "потрясающий"}, {"en": "backpacking", "ru": "путешествие с рюкзаком"}, {"en": "bandage", "ru": "повязка"}, {"en": "basement", "ru": "подвал"}, {"en": "beat", "ru": "бить"}, {"en": "beloved", "ru": "любимый"}, {"en": "bin", "ru": "мусорное ведро"}, {"en": "blend", "ru": "смешивать"}, {"en": "boast", "ru": "хвастаться"}, {"en": "boot", "ru": "ботинок"}, {"en": "boxing", "ru": "бокс"}, {"en": "breath", "ru": "дыхание"}, {"en": "brightly", "ru": "ярко"}, {"en": "buddy", "ru": "приятель"}, {"en": "burden", "ru": "бремя"}, {"en": "butcher", "ru": "мясник"}, {"en": "calculator", "ru": "калькулятор"}, {"en": "canal", "ru": "канал"}, {"en": "capacity", "ru": "вместимость"}, {"en": "carpet", "ru": "ковёр"}, {"en": "cattle", "ru": "скот"}, {"en": "ceremony", "ru": "церемония"}, {"en": "characterize", "ru": "характеризовать"}, {"en": "cheerful", "ru": "весёлый"}, {"en": "choke", "ru": "задыхаться"}, {"en": "civil", "ru": "гражданский"}, {"en": "clinic", "ru": "клиника"}, {"en": "collapse", "ru": "рушиться"}, {"en": "comet", "ru": "комета"}, {"en": "commonly", "ru": "обычно"}, {"en": "completely", "ru": "полностью"}, {"en": "compound", "ru": "соединение"}, {"en": "conduct", "ru": "проводить"}, {"en": "confusion", "ru": "путаница"}, {"en": "conservation", "ru": "сохранение"}, {"en": "constitution", "ru": "конституция"}, {"en": "content", "ru": "довольный"}, {"en": "contribution", "ru": "вклад"}, {"en": "cough", "ru": "кашель"}, {"en": "courageous", "ru": "смелый"}, {"en": "critic", "ru": "критик"}, {"en": "crush", "ru": "раздавить"}, {"en": "curious", "ru": "любопытный"}, {"en": "curtain", "ru": "занавеска"}, {"en": "damaged", "ru": "повреждённый"}, {"en": "dazzle", "ru": "ослеплять"}, {"en": "decision", "ru": "решение"}, {"en": "defeat", "ru": "поражение"}, {"en": "definitely", "ru": "определённо"}, {"en": "deliver", "ru": "доставлять"}, {"en": "deny", "ru": "отрицать"}, {"en": "depressed", "ru": "подавленный"}, {"en": "designer", "ru": "дизайнер"}, {"en": "destructive", "ru": "разрушительный"}, {"en": "device", "ru": "устройство"}, {"en": "differ", "ru": "отличаться"}, {"en": "disability", "ru": "инвалидность"}, {"en": "disastrous", "ru": "катастрофический"}, {"en": "disgusting", "ru": "отвратительный"}, {"en": "distinctly", "ru": "отчётливо"}, {"en": "dive", "ru": "нырять"}, {"en": "document", "ru": "документ"}, {"en": "drag", "ru": "тащить"}, {"en": "dustbin", "ru": "мусорный бак"}, {"en": "earache", "ru": "боль в ухе"}, {"en": "economic", "ru": "экономический"}, {"en": "educate", "ru": "обучать"}, {"en": "electricity", "ru": "электричество"}, {"en": "embarrassment", "ru": "смущение"}, {"en": "emphasis", "ru": "акцент"}, {"en": "encouragement", "ru": "поддержка"}, {"en": "engage", "ru": "вовлекать"}, {"en": "enrich", "ru": "обогащать"}, {"en": "entire", "ru": "весь"}, {"en": "equally", "ru": "одинаково"}, {"en": "eternal", "ru": "вечный"}, {"en": "examine", "ru": "исследовать"}, {"en": "exhausted", "ru": "измученный"}, {"en": "experiment", "ru": "эксперимент"}, {"en": "extinct", "ru": "вымерший"}, {"en": "failure", "ru": "неудача"}, {"en": "farewell", "ru": "прощание"}, {"en": "fasten", "ru": "пристёгивать"}, {"en": "fetch", "ru": "приносить"}, {"en": "finding", "ru": "открытие"}, {"en": "flash", "ru": "вспышка"}, {"en": "flunk", "ru": "провалить"}, {"en": "foot", "ru": "ступня"}, {"en": "formally", "ru": "формально"}, {"en": "foundation", "ru": "основание"}, {"en": "frequent", "ru": "частый"}, {"en": "frustrated", "ru": "разочарованный"}, {"en": "furthermore", "ru": "более того"}, {"en": "gardening", "ru": "садоводство"}, {"en": "generate", "ru": "создавать"}, {"en": "geography", "ru": "география"}, {"en": "giraffe", "ru": "жираф"}, {"en": "glorious", "ru": "великолепный"}, {"en": "gorgeous", "ru": "прекрасный"}, {"en": "graceful", "ru": "изящный"}, {"en": "grave", "ru": "могила"}, {"en": "growth", "ru": "рост"}, {"en": "gym", "ru": "спортзал"}, {"en": "handkerchief", "ru": "носовой платок"}, {"en": "hardship", "ru": "трудность"}, {"en": "hazard", "ru": "опасность"}, {"en": "hearty", "ru": "сердечный"}, {"en": "helpless", "ru": "беспомощный"}, {"en": "hire", "ru": "нанимать"}, {"en": "honest", "ru": "честный"}, {"en": "hopeless", "ru": "безнадёжный"}, {"en": "housework", "ru": "домашняя работа"}, {"en": "hunt", "ru": "охотиться"}, {"en": "illegally", "ru": "незаконно"}, {"en": "immigrate", "ru": "иммигрировать"}, {"en": "improvement", "ru": "улучшение"}, {"en": "incredible", "ru": "невероятный"}, {"en": "industrial", "ru": "промышленный"}, {"en": "ingredient", "ru": "ингредиент"}, {"en": "ink", "ru": "чернила"}, {"en": "inscription", "ru": "надпись"}, {"en": "institute", "ru": "институт"}, {"en": "intention", "ru": "намерение"}, {"en": "internationally", "ru": "на международном уровне"}, {"en": "invest", "ru": "инвестировать"}, {"en": "ironing", "ru": "глажка"}, {"en": "jail", "ru": "тюрьма"}, {"en": "joint", "ru": "совместный"}, {"en": "jungle", "ru": "джунгли"}, {"en": "knit", "ru": "вязать"}, {"en": "lasting", "ru": "длительный"}, {"en": "layer", "ru": "слой"}, {"en": "legal", "ru": "законный"}, {"en": "liberate", "ru": "освобождать"}, {"en": "lightly", "ru": "легко"}, {"en": "link", "ru": "связь"}, {"en": "location", "ru": "местоположение"}, {"en": "lottery", "ru": "лотерея"}, {"en": "lung", "ru": "лёгкое"}, {"en": "maintain", "ru": "поддерживать"}, {"en": "marine", "ru": "морской"}, {"en": "mathematics", "ru": "математика"}, {"en": "measurement", "ru": "измерение"}, {"en": "melt", "ru": "таять"}, {"en": "merchant", "ru": "торговец"}, {"en": "mineral", "ru": "минерал"}, {"en": "mischief", "ru": "озорство"}, {"en": "modem", "ru": "модем"}, {"en": "monster", "ru": "монстр"}, {"en": "motherland", "ru": "родина"}, {"en": "motto", "ru": "девиз"}, {"en": "mule", "ru": "мул"}, {"en": "naked", "ru": "голый"}, {"en": "naturally", "ru": "естественно"}, {"en": "neighborhood", "ru": "район"}, {"en": "newborn", "ru": "новорождённый"}, {"en": "noisily", "ru": "шумно"}, {"en": "northeastern", "ru": "северо-восточный"}, {"en": "notorious", "ru": "печально известный"}, {"en": "nutrition", "ru": "питание"}, {"en": "observe", "ru": "наблюдать"}, {"en": "occasionally", "ru": "иногда"}, {"en": "oneself", "ru": "себя"}, {"en": "oppression", "ru": "угнетение"}, {"en": "organ", "ru": "орган"}, {"en": "outdoors", "ru": "на улице"}, {"en": "overcome", "ru": "преодолевать"}, {"en": "owing", "ru": "должный"}, {"en": "pain", "ru": "боль"}, {"en": "paralyze", "ru": "парализовать"}, {"en": "participate", "ru": "участвовать"}, {"en": "patience", "ru": "терпение"}, {"en": "penny", "ru": "пенни"}, {"en": "personally", "ru": "лично"}, {"en": "philosophy", "ru": "философия"}, {"en": "pillow", "ru": "подушка"}, {"en": "pleasantly", "ru": "приятно"}, {"en": "policy", "ru": "политика"}, {"en": "pork", "ru": "свинина"}, {"en": "possessive", "ru": "притяжательный"}, {"en": "pound", "ru": "фунт"}, {"en": "preference", "ru": "предпочтение"}, {"en": "preschool", "ru": "дошкольный"}, {"en": "press", "ru": "нажимать"}, {"en": "prisoner", "ru": "заключённый"}, {"en": "procrastination", "ru": "прокрастинация"}, {"en": "prominent", "ru": "видный"}, {"en": "proportion", "ru": "пропорция"}, {"en": "protection", "ru": "защита"}, {"en": "psychological", "ru": "психологический"}, {"en": "punishment", "ru": "наказание"}, {"en": "quake", "ru": "землетрясение"}, {"en": "racial", "ru": "расовый"}, {"en": "rainforest", "ru": "тропический лес"}, {"en": "ration", "ru": "паёк"}, {"en": "reasonable", "ru": "разумный"}, {"en": "recommend", "ru": "рекомендовать"}, {"en": "reduce", "ru": "уменьшать"}, {"en": "refusal", "ru": "отказ"}, {"en": "register", "ru": "регистрировать"}, {"en": "relative", "ru": "родственник"}, {"en": "remainder", "ru": "остаток"}, {"en": "repay", "ru": "возвращать долг"}, {"en": "requirement", "ru": "требование"}, {"en": "residential", "ru": "жилой"}, {"en": "respond", "ru": "отвечать"}, {"en": "retail", "ru": "розничная торговля"}, {"en": "revision", "ru": "повторение"}, {"en": "rise", "ru": "подниматься"}, {"en": "routine", "ru": "рутина"}, {"en": "sadness", "ru": "грусть"}, {"en": "sand", "ru": "песок"}, {"en": "scan", "ru": "сканировать"}, {"en": "scholarship", "ru": "стипендия"}, {"en": "sculpture", "ru": "скульптура"}, {"en": "security", "ru": "безопасность"}, {"en": "sequence", "ru": "последовательность"}, {"en": "settle", "ru": "устраиваться"}, {"en": "shallow", "ru": "мелкий"}, {"en": "shelter", "ru": "убежище"}, {"en": "shopper", "ru": "покупатель"}, {"en": "signal", "ru": "сигнал"}, {"en": "similarly", "ru": "аналогично"}, {"en": "sleeve", "ru": "рукав"}, {"en": "slot", "ru": "щель"}, {"en": "solid", "ru": "твёрдый"}, {"en": "sore", "ru": "болезненный"}, {"en": "southwest", "ru": "юго-запад"}, {"en": "spectator", "ru": "зритель"}, {"en": "spiral", "ru": "спиральный"}, {"en": "sportsmanship", "ru": "спортивное поведение"}, {"en": "steady", "ru": "устойчивый"}, {"en": "sticky", "ru": "липкий"}, {"en": "strangely", "ru": "странно"}, {"en": "stressed", "ru": "напряжённый"}, {"en": "stubborn", "ru": "упрямый"}, {"en": "stupid", "ru": "глупый"}, {"en": "suffer", "ru": "страдать"}, {"en": "sundial", "ru": "солнечные часы"}, {"en": "supportive", "ru": "поддерживающий"}, {"en": "surprisingly", "ru": "удивительно"}, {"en": "swarm", "ru": "рой"}, {"en": "swollen", "ru": "опухший"}, {"en": "takeaway", "ru": "еда навынос"}, {"en": "tasteless", "ru": "безвкусный"}, {"en": "technique", "ru": "техника"}, {"en": "temporary", "ru": "временный"}, {"en": "term", "ru": "срок"}, {"en": "thankful", "ru": "благодарный"}, {"en": "thriller", "ru": "триллер"}, {"en": "tick", "ru": "тикать"}, {"en": "tin", "ru": "жестянка"}, {"en": "toothpaste", "ru": "зубная паста"}, {"en": "trace", "ru": "след"}, {"en": "transform", "ru": "превращать"}, {"en": "treat", "ru": "угощение"}, {"en": "triumph", "ru": "триумф"}, {"en": "turning", "ru": "поворот"}, {"en": "unafraid", "ru": "бесстрашный"}, {"en": "undergo", "ru": "проходить через"}, {"en": "unemployment", "ru": "безработица"}, {"en": "unfriendly", "ru": "недружелюбный"}, {"en": "unite", "ru": "объединять"}, {"en": "unrelated", "ru": "не связанный"}, {"en": "upload", "ru": "загружать"}, {"en": "vacancy", "ru": "вакансия"}, {"en": "vary", "ru": "варьироваться"}, {"en": "via", "ru": "через"}, {"en": "virtual", "ru": "виртуальный"}, {"en": "visually", "ru": "визуально"}, {"en": "voyage", "ru": "путешествие"}, {"en": "warning", "ru": "предупреждение"}, {"en": "wax", "ru": "воск"}, {"en": "whale", "ru": "кит"}, {"en": "whoever", "ru": "кто бы ни"}, {"en": "wing", "ru": "крыло"}, {"en": "workplace", "ru": "рабочее место"}, {"en": "wrap", "ru": "заворачивать"}];
+
+  var LS_CUSTOM = "mm_custom_words";
+  var LS_REJECTED = "mm_rejected_words";
+
+  function loadCustomWords() {
+    try { return JSON.parse(localStorage.getItem(LS_CUSTOM) || "[]"); } catch (e) { return []; }
+  }
+  function saveCustomWords(list) {
+    localStorage.setItem(LS_CUSTOM, JSON.stringify(list));
+  }
+  function loadRejected() {
+    try { return JSON.parse(localStorage.getItem(LS_REJECTED) || "[]"); } catch (e) { return []; }
+  }
+  function saveRejected(list) {
+    localStorage.setItem(LS_REJECTED, JSON.stringify(list));
+  }
+
+  function getActiveWordPool() {
+    var rejected = loadRejected();
+    var rejectedKeys = {};
+    rejected.forEach(function (w) { rejectedKeys[w.en.toLowerCase()] = true; });
+
+    var custom = loadCustomWords();
+    var all = SYSTEM_WORDS.concat(custom);
+    return all.filter(function (w) { return !rejectedKeys[w.en.toLowerCase()]; });
+  }
+
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  // ---------- Game state ----------
+  var ROUNDS = [5, 8, 12];
+  var START_TIME = 45;
+  var TIME_BONUS = 3;
+  var TIME_PENALTY = 3;
+  var SCORE_CORRECT = 10;
+  var SCORE_WRONG = 5;
+
+  var state = {
+    screen: "home", // home, playing, roundComplete, gameOver, settings
+    roundIndex: 0,
+    timeLeft: START_TIME,
+    score: 0,
+    timerHandle: null,
+    poolForGame: [],
+    usedWords: [], // words used this whole game session {en, ru}
+    board: [], // current board entries: {id, en, ru, matched}
+    selectedLeft: null,
+    selectedRight: null,
+    busy: false,
+    settingsTab: "add"
+  };
+
+  var app = document.getElementById("app");
+
+  function render() {
+    if (state.screen === "home") return renderHome();
+    if (state.screen === "playing") return renderPlaying();
+    if (state.screen === "roundComplete") return renderRoundComplete();
+    if (state.screen === "gameOver") return renderGameOver();
+    if (state.screen === "settings") return renderSettings();
+  }
+
+  // ---------- HOME ----------
+  function renderHome() {
+    var pool = getActiveWordPool();
+    app.innerHTML =
+      '<div class="screen">' +
+        '<h1>Match Madness</h1>' +
+        '<p>Собери пары слов на скорость. Правильный ответ - время и очки. Ошибка - минус время.</p>' +
+        '<div class="stat-line">Слов в игре: ' + pool.length + '</div>' +
+        '<button class="btn" id="startBtn">Начать</button>' +
+        '<button class="btn secondary" id="settingsBtn">Настройки слов</button>' +
+      '</div>';
+    document.getElementById("startBtn").onclick = startGame;
+    document.getElementById("settingsBtn").onclick = function () {
+      state.screen = "settings";
+      render();
+    };
+  }
+
+  function startGame() {
+    var pool = getActiveWordPool();
+    if (pool.length < 5) {
+      alert("Нужно минимум 5 слов в базе, чтобы начать игру. Сейчас: " + pool.length);
+      return;
+    }
+    var totalNeeded = ROUNDS.reduce(function (a, b) { return a + b; }, 0);
+    var count = Math.min(totalNeeded, pool.length);
+    state.poolForGame = shuffle(pool).slice(0, count);
+    state.roundIndex = 0;
+    state.timeLeft = START_TIME;
+    state.score = 0;
+    state.usedWords = [];
+    state.screen = "playing";
+    startRound();
+  }
+
+  // ---------- PLAYING ----------
+  function currentRoundPairCount() {
+    var idx = Math.min(state.roundIndex, ROUNDS.length - 1);
+    return ROUNDS[idx];
+  }
+
+  function startRound() {
+    var count = currentRoundPairCount();
+    var words = [];
+    for (var i = 0; i < count; i++) {
+      var w = state.poolForGame.shift();
+      if (!w) break;
+      words.push(w);
+    }
+    if (words.length === 0) {
+      endGame();
+      return;
+    }
+    words.forEach(function (w) {
+      var already = state.usedWords.some(function (u) { return u.en === w.en; });
+      if (!already) state.usedWords.push(w);
+    });
+
+    state.board = words.map(function (w, i) {
+      return { id: i, en: w.en, ru: w.ru, matched: false };
+    });
+    state.selectedLeft = null;
+    state.selectedRight = null;
+    state.busy = false;
+
+    render();
+    startTimer();
+  }
+
+  function startTimer() {
+    if (state.timerHandle) clearInterval(state.timerHandle);
+    state.timerHandle = setInterval(function () {
+      state.timeLeft -= 1;
+      updateTimerDisplay();
+      if (state.timeLeft <= 0) {
+        clearInterval(state.timerHandle);
+        state.timeLeft = 0;
+        timeUp();
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (state.timerHandle) {
+      clearInterval(state.timerHandle);
+      state.timerHandle = null;
+    }
+  }
+
+  function updateTimerDisplay() {
+    var el = document.getElementById("timerDisplay");
+    if (!el) return;
+    var m = Math.floor(state.timeLeft / 60);
+    var s = state.timeLeft % 60;
+    el.textContent = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+    el.classList.toggle("low", state.timeLeft <= 10);
+  }
+
+  function timeUp() {
+    state.screen = "gameOver";
+    state.gameOverReason = "time";
+    render();
+  }
+
+  function renderPlaying() {
+    var leftItems = state.board.filter(function (c) { return !c.matched; });
+    var rightItems = shuffleStable(state.board.filter(function (c) { return !c.matched; }));
+
+    var leftHtml = leftItems.map(function (c) {
+      return '<button class="card en" data-side="left" data-id="' + c.id + '">' + escapeHtml(c.en) + '</button>';
+    }).join("");
+    var rightHtml = rightItems.map(function (c) {
+      return '<button class="card ru" data-side="right" data-id="' + c.id + '">' + escapeHtml(c.ru) + '</button>';
+    }).join("");
+
+    app.innerHTML =
+      '<div class="topbar">' +
+        '<div class="timer" id="timerDisplay"></div>' +
+        '<div class="score" id="scoreDisplay">' + state.score + ' очк.</div>' +
+      '</div>' +
+      '<div class="round-label">Раунд ' + (state.roundIndex + 1) + ' из ' + ROUNDS.length + '</div>' +
+      '<div class="board">' +
+        '<div class="col" id="colLeft">' + leftHtml + '</div>' +
+        '<div class="col" id="colRight">' + rightHtml + '</div>' +
+      '</div>';
+
+    updateTimerDisplay();
+
+    Array.prototype.forEach.call(document.querySelectorAll(".card"), function (btn) {
+      btn.onclick = onCardClick;
+    });
+  }
+
+  // keep right column order stable across re-renders within the same round
+  var _rightOrderCache = null;
+  var _rightOrderRoundKey = null;
+  function shuffleStable(items) {
+    var key = state.roundIndex + "_" + state.board.map(function (c) { return c.id; }).join(",");
+    if (_rightOrderRoundKey !== key) {
+      _rightOrderCache = shuffle(items.map(function (c) { return c.id; }));
+      _rightOrderRoundKey = key;
+    }
+    var order = _rightOrderCache.filter(function (id) {
+      return items.some(function (c) { return c.id === id; });
+    });
+    return order.map(function (id) {
+      return items.filter(function (c) { return c.id === id; })[0];
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function onCardClick(e) {
+    if (state.busy) return;
+    var btn = e.currentTarget;
+    var side = btn.getAttribute("data-side");
+    var id = parseInt(btn.getAttribute("data-id"), 10);
+
+    Array.prototype.forEach.call(document.querySelectorAll(".card[data-side='" + side + "']"), function (b) {
+      b.classList.remove("selected");
+    });
+    btn.classList.add("selected");
+
+    if (side === "left") state.selectedLeft = id;
+    else state.selectedRight = id;
+
+    if (state.selectedLeft !== null && state.selectedRight !== null) {
+      checkMatch();
+    }
+  }
+
+  function checkMatch() {
+    state.busy = true;
+    var leftId = state.selectedLeft;
+    var rightId = state.selectedRight;
+    var leftBtn = document.querySelector(".card[data-side='left'][data-id='" + leftId + "']");
+    var rightBtn = document.querySelector(".card[data-side='right'][data-id='" + rightId + "']");
+
+    var isMatch = leftId === rightId;
+
+    if (isMatch) {
+      state.score += SCORE_CORRECT;
+      state.timeLeft += TIME_BONUS;
+      leftBtn.classList.add("correct");
+      rightBtn.classList.add("correct");
+      updateTimerDisplay();
+      updateScoreDisplay();
+      setTimeout(function () {
+        leftBtn.classList.add("gone");
+        rightBtn.classList.add("gone");
+        setTimeout(function () {
+          var item = state.board.filter(function (c) { return c.id === leftId; })[0];
+          if (item) item.matched = true;
+          state.selectedLeft = null;
+          state.selectedRight = null;
+          state.busy = false;
+          var remaining = state.board.filter(function (c) { return !c.matched; });
+          if (remaining.length === 0) {
+            roundComplete();
+          } else {
+            render();
+          }
+        }, 220);
+      }, 180);
+    } else {
+      state.score = Math.max(0, state.score - SCORE_WRONG);
+      state.timeLeft = Math.max(0, state.timeLeft - TIME_PENALTY);
+      leftBtn.classList.add("wrong");
+      rightBtn.classList.add("wrong");
+      updateTimerDisplay();
+      updateScoreDisplay();
+      if (state.timeLeft <= 0) {
+        setTimeout(function () {
+          stopTimer();
+          timeUp();
+        }, 350);
+        return;
+      }
+      setTimeout(function () {
+        leftBtn.classList.remove("selected", "wrong");
+        rightBtn.classList.remove("selected", "wrong");
+        state.selectedLeft = null;
+        state.selectedRight = null;
+        state.busy = false;
+      }, 350);
+    }
+  }
+
+  function updateScoreDisplay() {
+    var el = document.getElementById("scoreDisplay");
+    if (el) el.textContent = state.score + " очк.";
+  }
+
+  function roundComplete() {
+    stopTimer();
+    if (state.roundIndex >= ROUNDS.length - 1) {
+      endGame();
+      return;
+    }
+    state.screen = "roundComplete";
+    render();
+  }
+
+  function renderRoundComplete() {
+    app.innerHTML =
+      '<div class="screen">' +
+        '<h2>Раунд ' + (state.roundIndex + 1) + ' завершён!</h2>' +
+        '<div class="big-score">' + state.score + '</div>' +
+        '<p>очков набрано</p>' +
+        '<button class="btn" id="continueBtn">Продолжить</button>' +
+      '</div>';
+    document.getElementById("continueBtn").onclick = function () {
+      state.roundIndex += 1;
+      startRound();
+    };
+  }
+
+  function endGame() {
+    stopTimer();
+    state.screen = "gameOver";
+    render();
+  }
+
+  function renderGameOver() {
+    var reason = state.gameOverReason === "time" ? "Время вышло!" : "Игра завершена!";
+    var usedWords = state.usedWords;
+    var rejectedNow = {};
+
+    var listHtml = usedWords.map(function (w, i) {
+      return '<div class="reject-item">' +
+        '<span>' + escapeHtml(w.en) + ' - ' + escapeHtml(w.ru) + '</span>' +
+        '<button data-idx="' + i + '">Убрать</button>' +
+        '</div>';
+    }).join("");
+
+    app.innerHTML =
+      '<div class="screen">' +
+        '<h1>' + reason + '</h1>' +
+        '<div class="big-score">' + state.score + '</div>' +
+        '<p>итоговый счёт</p>' +
+        (usedWords.length ? (
+          '<p style="margin-top:8px;">Отметь слова, которые не зашли - они больше не будут появляться:</p>' +
+          '<div class="reject-list">' + listHtml + '</div>'
+        ) : '') +
+        '<button class="btn" id="playAgainBtn">Играть снова</button>' +
+        '<button class="btn secondary" id="homeBtn">На главную</button>' +
+      '</div>';
+
+    Array.prototype.forEach.call(document.querySelectorAll(".reject-item button"), function (btn) {
+      btn.onclick = function () {
+        var idx = parseInt(btn.getAttribute("data-idx"), 10);
+        var w = usedWords[idx];
+        var key = w.en.toLowerCase();
+        if (rejectedNow[key]) {
+          delete rejectedNow[key];
+          btn.classList.remove("marked");
+          btn.textContent = "Убрать";
+        } else {
+          rejectedNow[key] = w;
+          btn.classList.add("marked");
+          btn.textContent = "Убрано";
+        }
+      };
+    });
+
+    document.getElementById("playAgainBtn").onclick = function () {
+      commitRejected(rejectedNow);
+      startGame();
+    };
+    document.getElementById("homeBtn").onclick = function () {
+      commitRejected(rejectedNow);
+      state.screen = "home";
+      render();
+    };
+  }
+
+  function commitRejected(rejectedNow) {
+    var keys = Object.keys(rejectedNow);
+    if (keys.length === 0) return;
+    var existing = loadRejected();
+    var existingKeys = {};
+    existing.forEach(function (w) { existingKeys[w.en.toLowerCase()] = true; });
+    keys.forEach(function (k) {
+      if (!existingKeys[k]) {
+        existing.push(rejectedNow[k]);
+        existingKeys[k] = true;
+      }
+    });
+    saveRejected(existing);
+  }
+
+  // ---------- SETTINGS ----------
+  function renderSettings() {
+    var tab = state.settingsTab;
+    var custom = loadCustomWords();
+    var rejected = loadRejected();
+
+    var body = "";
+    if (tab === "add") {
+      body =
+        '<div class="row">' +
+          '<input type="text" id="enInput" placeholder="Слово на английском">' +
+          '<input type="text" id="ruInput" placeholder="Перевод на русском">' +
+        '</div>' +
+        '<button class="btn small" id="addWordBtn" style="width:auto;">Добавить</button>' +
+        '<h3>Твои слова (' + custom.length + ')</h3>' +
+        '<div class="word-list">' +
+          custom.map(function (w, i) {
+            return '<div class="word-row"><span>' + escapeHtml(w.en) + ' - ' + escapeHtml(w.ru) + '</span><button data-idx="' + i + '">Удалить</button></div>';
+          }).join("") +
+        '</div>';
+    } else if (tab === "bulk") {
+      body =
+        '<p style="font-size:13px;color:#777;">По одной паре на строку, формат: слово - перевод</p>' +
+        '<textarea id="bulkInput" placeholder="dog - собака\ncat - кошка"></textarea>' +
+        '<button class="btn small" id="bulkAddBtn" style="width:auto;margin-top:8px;">Импортировать</button>';
+    } else if (tab === "rejected") {
+      body =
+        '<h3>Убранные слова (' + rejected.length + ')</h3>' +
+        '<p style="font-size:13px;color:#777;">Эти слова не появляются в игре. Верни, если передумал.</p>' +
+        '<div class="word-list">' +
+          rejected.map(function (w, i) {
+            return '<div class="word-row"><span>' + escapeHtml(w.en) + ' - ' + escapeHtml(w.ru) + '</span><button data-idx="' + i + '">Вернуть</button></div>';
+          }).join("") +
+        '</div>';
+    }
+
+    var pool = getActiveWordPool();
+
+    app.innerHTML =
+      '<div class="screen" style="justify-content:flex-start;">' +
+        '<h2>Настройки слов</h2>' +
+        '<div class="stat-line">Активно слов в игре: ' + pool.length + ' (база: ' + SYSTEM_WORDS.length + ', свои: ' + custom.length + ', убрано: ' + rejected.length + ')</div>' +
+        '<div class="tabs">' +
+          '<button data-tab="add" class="' + (tab === "add" ? "active" : "") + '">Добавить</button>' +
+          '<button data-tab="bulk" class="' + (tab === "bulk" ? "active" : "") + '">Массово</button>' +
+          '<button data-tab="rejected" class="' + (tab === "rejected" ? "active" : "") + '">Убранные</button>' +
+        '</div>' +
+        '<div class="settings-panel">' + body + '</div>' +
+        '<button class="btn secondary" id="backBtn">Назад</button>' +
+      '</div>';
+
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (btn) {
+      btn.onclick = function () {
+        state.settingsTab = btn.getAttribute("data-tab");
+        render();
+      };
+    });
+
+    document.getElementById("backBtn").onclick = function () {
+      state.screen = "home";
+      render();
+    };
+
+    if (tab === "add") {
+      document.getElementById("addWordBtn").onclick = function () {
+        var en = document.getElementById("enInput").value.trim();
+        var ru = document.getElementById("ruInput").value.trim();
+        if (!en || !ru) return;
+        var list = loadCustomWords();
+        list.push({ en: en, ru: ru });
+        saveCustomWords(list);
+        render();
+      };
+      Array.prototype.forEach.call(document.querySelectorAll("#app .word-list button"), function (btn) {
+        btn.onclick = function () {
+          var idx = parseInt(btn.getAttribute("data-idx"), 10);
+          var list = loadCustomWords();
+          list.splice(idx, 1);
+          saveCustomWords(list);
+          render();
+        };
+      });
+    } else if (tab === "bulk") {
+      document.getElementById("bulkAddBtn").onclick = function () {
+        var text = document.getElementById("bulkInput").value;
+        var lines = text.split("\n");
+        var list = loadCustomWords();
+        var added = 0;
+        lines.forEach(function (line) {
+          line = line.trim();
+          if (!line) return;
+          var parts = line.split(/\s+-\s+/);
+          if (parts.length !== 2) {
+            parts = line.split("-");
+          }
+          if (parts.length === 2) {
+            var en = parts[0].trim();
+            var ru = parts[1].trim();
+            if (en && ru) {
+              list.push({ en: en, ru: ru });
+              added++;
+            }
+          }
+        });
+        saveCustomWords(list);
+        render();
+      };
+    } else if (tab === "rejected") {
+      Array.prototype.forEach.call(document.querySelectorAll("#app .word-list button"), function (btn) {
+        btn.onclick = function () {
+          var idx = parseInt(btn.getAttribute("data-idx"), 10);
+          var list = loadRejected();
+          list.splice(idx, 1);
+          saveRejected(list);
+          render();
+        };
+      });
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
