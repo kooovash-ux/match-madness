@@ -217,6 +217,39 @@
     background: #f0fce6;
   }
   .stat-line { font-size: 13px; color: #999; margin-bottom: 6px; }
+
+  .record-card {
+    width: 100%;
+    max-width: 280px;
+    background: linear-gradient(135deg, #f0fce6, #fff);
+    border: 2px solid #58CC02;
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .record-card .stars {
+    font-size: 22px;
+    color: #FFC800;
+    letter-spacing: 4px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .record-card .record-main {
+    font-size: 26px;
+    font-weight: 800;
+    color: #4b4b4b;
+  }
+  .record-card .record-sub {
+    font-size: 13px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .record-card.empty {
+    background: #fafafa;
+    border: 2px dashed #e5e5e5;
+  }
+  .record-card.empty .record-main { color: #afafaf; font-size: 15px; font-weight: 700; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -301,6 +334,19 @@
     if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return n + " слова";
     return n + " слов";
   }
+  function starsFor(matched) {
+    if (matched >= 30) return 3;
+    if (matched >= 15) return 2;
+    if (matched >= 5) return 1;
+    return 0;
+  }
+  function starsHtml(count) {
+    var html = "";
+    for (var i = 0; i < 3; i++) {
+      html += i < count ? "★" : "☆";
+    }
+    return html;
+  }
   function formatDateTime(d) {
     var pad = function (n) { return n < 10 ? "0" + n : "" + n; };
     return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear() +
@@ -336,9 +382,18 @@
   // ---------- HOME ----------
   function renderHome() {
     var record = loadRecord();
-    var recordHtml = record
-      ? '<div class="stat-line">Рекорд: ' + pluralWords(record.matched) + ' (' + record.date + ')</div>'
-      : '<div class="stat-line">Рекордов пока нет - сыграй первую игру</div>';
+    var recordHtml;
+    if (record) {
+      var stars = starsFor(record.matched);
+      recordHtml =
+        '<div class="record-card">' +
+          '<div class="stars">' + starsHtml(stars) + '</div>' +
+          '<div class="record-main">' + pluralWords(record.matched) + '</div>' +
+          '<div class="record-sub">' + (record.score || 0) + ' очков · ' + record.date + '</div>' +
+        '</div>';
+    } else {
+      recordHtml = '<div class="record-card empty"><div class="record-main">Рекордов пока нет - сыграй первую игру</div></div>';
+    }
 
     var mode = loadSourceMode();
     var customCount = loadCustomWords().length;
@@ -589,7 +644,7 @@
     var record = loadRecord();
     state.isNewRecord = !record || state.matchedCount > record.matched;
     if (state.isNewRecord) {
-      saveRecord({ matched: state.matchedCount, date: formatDateTime(new Date()) });
+      saveRecord({ matched: state.matchedCount, score: state.score, date: formatDateTime(new Date()) });
     }
 
     render();
@@ -610,6 +665,7 @@
     app.innerHTML =
       '<div class="screen">' +
         '<h1>' + reason + '</h1>' +
+        '<div class="stars" style="font-size:28px;">' + starsHtml(starsFor(state.matchedCount)) + '</div>' +
         '<div class="big-score">' + state.score + '</div>' +
         '<p>итоговый счёт - замэчено ' + pluralWords(state.matchedCount) + '</p>' +
         (state.isNewRecord ? '<p style="color:#58CC02;font-weight:800;">Новый рекорд!</p>' : '') +
