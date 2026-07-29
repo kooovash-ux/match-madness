@@ -601,8 +601,9 @@
   // ---------- Game state ----------
   var CYCLE_SIZE = 5;
   var START_TIME = 45;
+  var MAX_TIME = 60;
   var TIME_BONUS = 3;
-  var TIME_PENALTY = 6;
+  var TIME_PENALTY = 8;
   var SCORE_CORRECT = 10;
   var SCORE_WRONG = 5;
 
@@ -1016,7 +1017,7 @@
     if (isMatch) {
       state.score += SCORE_CORRECT;
       state.matchedCount += 1;
-      state.timeLeft += TIME_BONUS;
+      state.timeLeft = Math.min(MAX_TIME, state.timeLeft + TIME_BONUS);
       var justUnlocked = addLifetimePoints(SCORE_CORRECT);
       if (justUnlocked.length) state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked);
       leftBtn.classList.add("correct");
