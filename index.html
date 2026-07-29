@@ -457,7 +457,7 @@
   }
   .puzzle-cell {
     position: relative;
-    aspect-ratio: 1 / 1;
+    aspect-ratio: 768 / 580;
     border-radius: 5px;
     background-color: rgba(255,255,255,.02);
   }
@@ -495,7 +495,7 @@
     letter-spacing: .5px;
   }
   .piece-reward-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
-  .piece-reward-row .puzzle-cell { width: 44px; height: 44px; flex: none; }
+  .piece-reward-row .puzzle-cell { width: 62px; height: auto; aspect-ratio: 768 / 580; flex: none; }
   .piece-pop {
     animation: piecePop .55s var(--spring) both;
   }
@@ -513,6 +513,23 @@
   .reject-list::-webkit-scrollbar-thumb, .word-list::-webkit-scrollbar-thumb {
     background: rgba(0,229,255,.35); border-radius: 3px;
   }
+
+  /* completed pictures gallery */
+  .collected-title { font-family:"Orbitron",sans-serif; font-size:13px; font-weight:700; color:#ffe6a3; margin:18px 0 10px; letter-spacing:.5px; text-shadow:0 0 12px rgba(255,200,0,.4); }
+  .collected-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; width:100%; max-width:340px; }
+  .collected-card { position:relative; border:none; cursor:pointer; padding:7px; border-radius:13px; background:linear-gradient(135deg,#6a4f11,#3a2c08); box-shadow:0 0 0 2px #ffd24a inset,0 0 16px rgba(255,200,0,.45),0 6px 18px rgba(0,0,0,.45); display:flex; flex-direction:column; gap:7px; align-items:center; margin-top:8px; transition:transform .2s var(--spring),box-shadow .2s var(--ease-out); animation:cellReveal .45s var(--spring) both; }
+  .collected-card:hover, .collected-card:active { transform:scale(1.05); box-shadow:0 0 0 2px #ffe27a inset,0 0 28px rgba(255,200,0,.75),0 6px 22px rgba(0,0,0,.55); }
+  .collected-img { display:block; width:100%; aspect-ratio:768/580; border-radius:8px; background-size:cover; background-position:center; box-shadow:0 0 0 1px rgba(0,0,0,.45) inset; }
+  .collected-card .crown { position:absolute; top:-13px; left:50%; transform:translateX(-50%); font-size:23px; filter:drop-shadow(0 0 7px rgba(255,200,0,.95)); z-index:2; }
+  .collected-label { font-family:"Rajdhani",sans-serif; font-size:12px; font-weight:700; color:#ffe6a3; letter-spacing:.3px; }
+
+  /* picture view + download modal */
+  .pic-modal { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(6,8,16,.82); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); animation:fadeSlide .22s var(--ease-out) both; }
+  .pic-modal-box { width:100%; max-width:440px; background:linear-gradient(160deg,#141a2c,#0c0814); border:1.5px solid #ffd24a; border-radius:16px; padding:16px; box-shadow:0 0 0 3px rgba(255,200,0,.25),0 0 40px rgba(255,200,0,.3); display:flex; flex-direction:column; gap:12px; animation:piecePop .5s var(--spring) both; }
+  .pic-modal-head { font-family:"Orbitron",sans-serif; font-size:15px; font-weight:800; color:#ffe6a3; text-align:center; text-shadow:0 0 12px rgba(255,200,0,.5); }
+  .pic-modal-img { width:100%; border-radius:10px; display:block; box-shadow:0 0 20px rgba(0,229,255,.25); }
+  .pic-modal-actions { display:flex; gap:10px; }
+  .pic-modal-actions .btn { flex:1; max-width:none; text-decoration:none; text-align:center; padding:12px 10px; }
 </style>
 </head>
 <body>
@@ -600,21 +617,25 @@
 
   // ---------- Game state ----------
   var CYCLE_SIZE = 5;
-  var START_TIME = 45;
+  var START_TIME = 60;
   var MAX_TIME = 60;
   var TIME_BONUS = 3;
   var TIME_PENALTY = 8;
   var SCORE_CORRECT = 10;
   var SCORE_WRONG = 5;
 
-  // ---------- Puzzle (all-time cumulative reward) ----------
+  // ---------- Puzzle (all-time cumulative reward, multi-picture) ----------
   var PUZZLE_COLS = 5;
   var PUZZLE_ROWS = 4;
-  var PUZZLE_PIECES = PUZZLE_COLS * PUZZLE_ROWS; // 20
-  var PUZZLE_STEP = 100; // points per piece: 100, 200, ... 2000
+  var PUZZLE_PIECES = PUZZLE_COLS * PUZZLE_ROWS; // 20 per picture
+  var PUZZLE_STEP = 100; // points per piece (100 => 1 piece, < 100 => 0)
+  var PUZZLE_IMAGES = [
+    "2917197433_preview_1142594.jpg",
+    "140470-electronic_entertainment_expo-avtomobil-asfalt-mortal_kombat_11-kiberpank_2077-1920x1080.jpg",
+    "thumb-1920-1299981.jpg"
+  ];
   var LS_LIFETIME_SCORE = "mm_lifetime_score";
-  var LS_PUZZLE_UNLOCKED = "mm_puzzle_unlocked_count";
-  var LS_PUZZLE_PERM = "mm_puzzle_perm";
+  var LS_PUZZLE_PERMS = "mm_puzzle_perms";
 
   function loadLifetimeScore() {
     return parseInt(localStorage.getItem(LS_LIFETIME_SCORE) || "0", 10) || 0;
@@ -622,41 +643,53 @@
   function saveLifetimeScore(v) {
     localStorage.setItem(LS_LIFETIME_SCORE, String(v));
   }
-  function loadUnlockedCount() {
-    return parseInt(localStorage.getItem(LS_PUZZLE_UNLOCKED) || "0", 10) || 0;
+  function globalPiecesUnlocked() {
+    return Math.floor(loadLifetimeScore() / PUZZLE_STEP);
   }
-  function saveUnlockedCount(v) {
-    localStorage.setItem(LS_PUZZLE_UNLOCKED, String(v));
+  function completedPicturesCount() {
+    return Math.floor(globalPiecesUnlocked() / PUZZLE_PIECES);
   }
-  function loadPuzzlePerm() {
-    try {
-      var raw = JSON.parse(localStorage.getItem(LS_PUZZLE_PERM) || "null");
-      if (Array.isArray(raw) && raw.length === PUZZLE_PIECES) return raw;
-    } catch (e) {}
-    var perm = [];
-    for (var i = 0; i < PUZZLE_PIECES; i++) perm.push(i);
-    perm = shuffle(perm);
-    localStorage.setItem(LS_PUZZLE_PERM, JSON.stringify(perm));
-    return perm;
+  function currentPictureIndex() {
+    return completedPicturesCount();
   }
-  // Adds points earned during play to the lifetime pool and unlocks any newly earned pieces.
-  // Returns array of grid-cell indices that just got unlocked (for the reveal animation).
-  function addLifetimePoints(points) {
-    var total = loadLifetimeScore() + points;
-    saveLifetimeScore(total);
-    var perm = loadPuzzlePerm();
-    var prevUnlocked = loadUnlockedCount();
-    var newUnlocked = Math.min(PUZZLE_PIECES, Math.floor(total / PUZZLE_STEP));
-    var justUnlocked = [];
-    if (newUnlocked > prevUnlocked) {
-      for (var i = prevUnlocked; i < newUnlocked; i++) justUnlocked.push(perm[i]);
-      saveUnlockedCount(newUnlocked);
+  function currentPiecesUnlocked() {
+    return globalPiecesUnlocked() % PUZZLE_PIECES;
+  }
+  function puzzleImageFor(pictureIndex) {
+    return PUZZLE_IMAGES[pictureIndex % PUZZLE_IMAGES.length];
+  }
+  function loadPerms() {
+    try { var r = JSON.parse(localStorage.getItem(LS_PUZZLE_PERMS) || "null"); if (Array.isArray(r)) return r; } catch (e) {}
+    return [];
+  }
+  function savePerms(a) { localStorage.setItem(LS_PUZZLE_PERMS, JSON.stringify(a)); }
+  function getPerm(pictureIndex) {
+    var perms = loadPerms();
+    if (!Array.isArray(perms[pictureIndex]) || perms[pictureIndex].length !== PUZZLE_PIECES) {
+      var p = [];
+      for (var i = 0; i < PUZZLE_PIECES; i++) p.push(i);
+      p = shuffle(p);
+      perms[pictureIndex] = p;
+      savePerms(perms);
     }
-    return justUnlocked;
+    return perms[pictureIndex];
   }
-  function puzzleUnlockedCells() {
-    var perm = loadPuzzlePerm();
-    var count = loadUnlockedCount();
+  // Adds points; returns array of {picture, cell} unlocked this call (for reveal).
+  function addLifetimePoints(points) {
+    var before = globalPiecesUnlocked();
+    saveLifetimeScore(loadLifetimeScore() + points);
+    var after = globalPiecesUnlocked();
+    var just = [];
+    for (var g = before; g < after; g++) {
+      var pic = Math.floor(g / PUZZLE_PIECES);
+      var perm = getPerm(pic);
+      just.push({ picture: pic, cell: perm[g % PUZZLE_PIECES] });
+    }
+    return just;
+  }
+  function currentUnlockedCells() {
+    var perm = getPerm(currentPictureIndex());
+    var count = currentPiecesUnlocked();
     var set = {};
     for (var i = 0; i < count; i++) set[perm[i]] = true;
     return set;
@@ -725,38 +758,7 @@
 
   // ---------- Puzzle artwork ----------
   // Single neon illustration sliced into a 5x4 grid; no external file needed.
-  var PUZZLE_IMAGE = "data:image/svg+xml;utf8," + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">' +
-    '<defs>' +
-      '<radialGradient id="bg" cx="30%" cy="20%" r="90%">' +
-        '<stop offset="0%" stop-color="#241238"/>' +
-        '<stop offset="100%" stop-color="#0a0e1a"/>' +
-      '</radialGradient>' +
-      '<radialGradient id="sun" cx="50%" cy="50%" r="50%">' +
-        '<stop offset="0%" stop-color="#ff8fd6"/>' +
-        '<stop offset="45%" stop-color="#ff2d78"/>' +
-        '<stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>' +
-      '</radialGradient>' +
-      '<linearGradient id="cyanGlow" x1="0" y1="0" x2="1" y2="1">' +
-        '<stop offset="0%" stop-color="#00e5ff"/>' +
-        '<stop offset="100%" stop-color="#3ec9ff" stop-opacity="0.2"/>' +
-      '</linearGradient>' +
-    '</defs>' +
-    '<rect width="500" height="400" fill="url(#bg)"/>' +
-    '<circle cx="250" cy="190" r="120" fill="url(#sun)"/>' +
-    '<circle cx="250" cy="190" r="70" fill="none" stroke="#00e5ff" stroke-width="2" opacity="0.55"/>' +
-    '<circle cx="250" cy="190" r="95" fill="none" stroke="#ff4fd8" stroke-width="1.5" opacity="0.4"/>' +
-    '<path d="M0 320 Q125 260 250 300 T500 290 V400 H0 Z" fill="url(#cyanGlow)" opacity="0.5"/>' +
-    '<path d="M0 360 Q140 320 260 350 T500 340 V400 H0 Z" fill="#a855f7" opacity="0.35"/>' +
-    '<g fill="#ffffff">' +
-      '<circle cx="60" cy="60" r="2"/><circle cx="120" cy="40" r="1.4"/><circle cx="400" cy="70" r="2"/>' +
-      '<circle cx="440" cy="120" r="1.6"/><circle cx="80" cy="150" r="1.4"/><circle cx="340" cy="50" r="1.8"/>' +
-      '<circle cx="460" cy="40" r="1.2"/><circle cx="30" cy="250" r="1.6"/><circle cx="470" cy="230" r="1.8"/>' +
-    '</g>' +
-    '<text x="250" y="200" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="34" font-weight="900" fill="#ffffff" style="text-shadow:0 0 20px #00e5ff;">MATCH</text>' +
-    '<text x="250" y="235" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="34" font-weight="900" fill="#ffffff">MADNESS</text>' +
-    '</svg>'
-  );
+  // puzzle images defined above as PUZZLE_IMAGES
 
   // ---------- HOME ----------
   function renderHome() {
@@ -799,7 +801,7 @@
         sourcePickerHtml +
         '<div class="stat-line" id="poolCountLine">Слов в игре: ' + pool.length + '</div>' +
         '<button class="btn" id="startBtn">Начать</button>' +
-        '<button class="btn secondary" id="achievementsBtn">🧩 Достижения (' + loadUnlockedCount() + '/' + PUZZLE_PIECES + ')</button>' +
+        '<button class="btn secondary" id="achievementsBtn">🧩 Достижения (' + currentPiecesUnlocked() + '/' + PUZZLE_PIECES + ')</button>' +
         '<button class="btn secondary" id="settingsBtn">Настройки слов</button>' +
       '</div>';
 
@@ -822,38 +824,54 @@
   }
 
   // ---------- ACHIEVEMENTS (all-time puzzle) ----------
-  function puzzleCellStyle(index) {
+  function puzzleCellStyle(index, image) {
     var col = index % PUZZLE_COLS;
     var row = Math.floor(index / PUZZLE_COLS);
     var posX = (col / (PUZZLE_COLS - 1)) * 100;
     var posY = (row / (PUZZLE_ROWS - 1)) * 100;
-    return 'background-image:url(' + PUZZLE_IMAGE + ');' +
+    return 'background-image:url(' + image + ');' +
       'background-size:' + (PUZZLE_COLS * 100) + '% ' + (PUZZLE_ROWS * 100) + '%;' +
       'background-position:' + posX + '% ' + posY + '%;';
   }
 
   function renderAchievements() {
     var total = loadLifetimeScore();
-    var unlocked = puzzleUnlockedCells();
-    var unlockedCount = loadUnlockedCount();
-    var nextTarget = Math.min(PUZZLE_PIECES * PUZZLE_STEP, (unlockedCount + 1) * PUZZLE_STEP);
-    var complete = unlockedCount >= PUZZLE_PIECES;
+    var picIndex = currentPictureIndex();
+    var image = puzzleImageFor(picIndex);
+    var unlocked = currentUnlockedCells();
+    var count = currentPiecesUnlocked();
+    var completed = completedPicturesCount();
+    var toNext = (globalPiecesUnlocked() + 1) * PUZZLE_STEP - total;
 
     var cellsHtml = "";
     for (var i = 0; i < PUZZLE_PIECES; i++) {
-      if (unlocked[i]) {
-        cellsHtml += '<div class="puzzle-cell unlocked" style="' + puzzleCellStyle(i) + '"></div>';
-      } else {
-        cellsHtml += '<div class="puzzle-cell locked"></div>';
+      if (unlocked[i]) cellsHtml += '<div class="puzzle-cell unlocked" style="' + puzzleCellStyle(i, image) + '"></div>';
+      else cellsHtml += '<div class="puzzle-cell locked"></div>';
+    }
+
+    var collectedHtml = "";
+    if (completed > 0) {
+      var cards = "";
+      for (var c = 0; c < completed; c++) {
+        var img = puzzleImageFor(c);
+        cards += '<button class="collected-card" data-img="' + img + '" data-num="' + (c + 1) + '">' +
+          '<span class="crown">👑</span>' +
+          '<span class="collected-img" style="background-image:url(' + img + ');"></span>' +
+          '<span class="collected-label">Картина ' + (c + 1) + '</span>' +
+          '</button>';
       }
+      collectedHtml =
+        '<div class="collected-title">Собранные картины (' + completed + ')</div>' +
+        '<div class="collected-grid">' + cards + '</div>';
     }
 
     app.innerHTML =
       '<div class="screen" style="justify-content:flex-start;">' +
         '<h2>🧩 Достижения</h2>' +
-        '<p>Каждые ' + PUZZLE_STEP + ' очков за всё время игры открывают кусочек картинки.</p>' +
+        '<p>Каждые ' + PUZZLE_STEP + ' очков открывают кусочек. Картина №' + (picIndex + 1) + ' — ' + count + '/' + PUZZLE_PIECES + '.</p>' +
         '<div class="puzzle-grid">' + cellsHtml + '</div>' +
-        '<div class="stat-line">Очков всего: ' + total + (complete ? ' · картинка собрана полностью!' : ' · до следующего кусочка: ' + (nextTarget - total)) + '</div>' +
+        '<div class="stat-line">Очков всего: ' + total + ' · до следующего кусочка: ' + toNext + '</div>' +
+        collectedHtml +
         '<button class="btn secondary" id="backBtn">Назад</button>' +
       '</div>';
 
@@ -861,6 +879,30 @@
       state.screen = "home";
       render();
     };
+    Array.prototype.forEach.call(document.querySelectorAll(".collected-card"), function (btn) {
+      btn.onclick = function () {
+        openPictureModal(btn.getAttribute("data-img"), btn.getAttribute("data-num"));
+      };
+    });
+  }
+
+  function openPictureModal(img, num) {
+    var overlay = document.createElement("div");
+    overlay.className = "pic-modal";
+    overlay.innerHTML =
+      '<div class="pic-modal-box">' +
+        '<div class="pic-modal-head"><span class="crown">👑</span> Картина ' + num + ' собрана</div>' +
+        '<img class="pic-modal-img" src="' + img + '" alt="Картина ' + num + '">' +
+        '<div class="pic-modal-actions">' +
+          '<a class="btn" href="' + img + '" download="match-madness-' + num + '.jpg">Скачать</a>' +
+          '<button class="btn secondary" data-close="1">Закрыть</button>' +
+        '</div>' +
+      '</div>';
+    overlay.addEventListener("click", function (e) {
+      var t = e.target;
+      if (t === overlay || (t.getAttribute && t.getAttribute("data-close"))) overlay.remove();
+    });
+    document.body.appendChild(overlay);
   }
 
   function startGame() {
@@ -1110,11 +1152,11 @@
           '<div class="piece-reward">' +
             '<div class="piece-reward-title">' + (state.sessionNewPieces.length > 1 ? 'Новые кусочки пазла!' : 'Новый кусочек пазла!') + '</div>' +
             '<div class="piece-reward-row">' +
-              state.sessionNewPieces.map(function (idx, i) {
-                return '<div class="puzzle-cell unlocked piece-pop" style="' + puzzleCellStyle(idx) + 'animation-delay:' + (i * 0.12) + 's;"></div>';
+              state.sessionNewPieces.map(function (p, i) {
+                return '<div class="puzzle-cell unlocked piece-pop" style="' + puzzleCellStyle(p.cell, puzzleImageFor(p.picture)) + 'animation-delay:' + (i * 0.12) + 's;"></div>';
               }).join("") +
             '</div>' +
-            '<button class="btn small secondary" id="viewPuzzleBtn" style="width:auto;margin-top:6px;">Смотреть пазл (' + loadUnlockedCount() + '/' + PUZZLE_PIECES + ')</button>' +
+            '<button class="btn small secondary" id="viewPuzzleBtn" style="width:auto;margin-top:6px;">Смотреть пазл (' + currentPiecesUnlocked() + '/' + PUZZLE_PIECES + ')</button>' +
           '</div>'
         ) : '') +
         (usedWords.length ? (
