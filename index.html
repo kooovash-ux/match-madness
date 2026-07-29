@@ -442,6 +442,72 @@
   .record-card.empty .record-main { color: var(--ink-dim); font-size: 15px; font-weight: 700; text-shadow:none; font-family:"Rajdhani",sans-serif; }
   .hidden { display: none !important; }
 
+  /* ---------- Puzzle (achievements) ---------- */
+  .puzzle-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    width: 100%;
+    max-width: 300px;
+    margin: 4px auto;
+    padding: 8px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(140,150,184,.16);
+  }
+  .puzzle-cell {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 5px;
+    background-color: rgba(255,255,255,.02);
+  }
+  .puzzle-cell.locked {
+    border: 1.5px dashed rgba(140,150,184,.28);
+    background: transparent;
+  }
+  .puzzle-cell.unlocked {
+    box-shadow: 0 0 0 1px rgba(0,229,255,.35) inset, 0 0 10px rgba(0,229,255,.25);
+    animation: cellReveal .3s var(--ease-out) both;
+  }
+  @keyframes cellReveal {
+    0%   { opacity: 0; transform: scale(.7) rotate(-6deg); filter: brightness(2); }
+    60%  { opacity: 1; transform: scale(1.08) rotate(2deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0); filter: brightness(1); }
+  }
+
+  .piece-reward {
+    width: 100%;
+    max-width: 300px;
+    background: linear-gradient(135deg, rgba(0,229,255,.1), rgba(255,45,120,.1));
+    border: 1.5px solid rgba(0,229,255,.4);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 0 24px rgba(0,229,255,.2);
+  }
+  .piece-reward-title {
+    font-family: "Orbitron", sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(0,229,255,.6);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .piece-reward-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .piece-reward-row .puzzle-cell { width: 44px; height: 44px; flex: none; }
+  .piece-pop {
+    animation: piecePop .55s var(--spring) both;
+  }
+  @keyframes piecePop {
+    0%   { opacity: 0; transform: scale(.3) rotate(-25deg) translateY(14px);
+           box-shadow: 0 0 0 rgba(0,229,255,0); }
+    55%  { opacity: 1; transform: scale(1.18) rotate(6deg) translateY(-4px);
+           box-shadow: 0 0 24px rgba(0,229,255,.8), 0 0 40px rgba(255,45,120,.5); }
+    100% { opacity: 1; transform: scale(1) rotate(0) translateY(0);
+           box-shadow: 0 0 10px rgba(0,229,255,.3); }
+  }
+
   /* neon scrollbars */
   .reject-list::-webkit-scrollbar, .word-list::-webkit-scrollbar { width:6px; }
   .reject-list::-webkit-scrollbar-thumb, .word-list::-webkit-scrollbar-thumb {
@@ -540,6 +606,61 @@
   var SCORE_CORRECT = 10;
   var SCORE_WRONG = 5;
 
+  // ---------- Puzzle (all-time cumulative reward) ----------
+  var PUZZLE_COLS = 5;
+  var PUZZLE_ROWS = 4;
+  var PUZZLE_PIECES = PUZZLE_COLS * PUZZLE_ROWS; // 20
+  var PUZZLE_STEP = 100; // points per piece: 100, 200, ... 2000
+  var LS_LIFETIME_SCORE = "mm_lifetime_score";
+  var LS_PUZZLE_UNLOCKED = "mm_puzzle_unlocked_count";
+  var LS_PUZZLE_PERM = "mm_puzzle_perm";
+
+  function loadLifetimeScore() {
+    return parseInt(localStorage.getItem(LS_LIFETIME_SCORE) || "0", 10) || 0;
+  }
+  function saveLifetimeScore(v) {
+    localStorage.setItem(LS_LIFETIME_SCORE, String(v));
+  }
+  function loadUnlockedCount() {
+    return parseInt(localStorage.getItem(LS_PUZZLE_UNLOCKED) || "0", 10) || 0;
+  }
+  function saveUnlockedCount(v) {
+    localStorage.setItem(LS_PUZZLE_UNLOCKED, String(v));
+  }
+  function loadPuzzlePerm() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(LS_PUZZLE_PERM) || "null");
+      if (Array.isArray(raw) && raw.length === PUZZLE_PIECES) return raw;
+    } catch (e) {}
+    var perm = [];
+    for (var i = 0; i < PUZZLE_PIECES; i++) perm.push(i);
+    perm = shuffle(perm);
+    localStorage.setItem(LS_PUZZLE_PERM, JSON.stringify(perm));
+    return perm;
+  }
+  // Adds points earned during play to the lifetime pool and unlocks any newly earned pieces.
+  // Returns array of grid-cell indices that just got unlocked (for the reveal animation).
+  function addLifetimePoints(points) {
+    var total = loadLifetimeScore() + points;
+    saveLifetimeScore(total);
+    var perm = loadPuzzlePerm();
+    var prevUnlocked = loadUnlockedCount();
+    var newUnlocked = Math.min(PUZZLE_PIECES, Math.floor(total / PUZZLE_STEP));
+    var justUnlocked = [];
+    if (newUnlocked > prevUnlocked) {
+      for (var i = prevUnlocked; i < newUnlocked; i++) justUnlocked.push(perm[i]);
+      saveUnlockedCount(newUnlocked);
+    }
+    return justUnlocked;
+  }
+  function puzzleUnlockedCells() {
+    var perm = loadPuzzlePerm();
+    var count = loadUnlockedCount();
+    var set = {};
+    for (var i = 0; i < count; i++) set[perm[i]] = true;
+    return set;
+  }
+
   var LS_RECORD = "mm_best_record";
 
   function loadRecord() {
@@ -587,7 +708,8 @@
     selectedLeft: null,
     selectedRight: null,
     busy: false,
-    settingsTab: "add"
+    settingsTab: "add",
+    sessionNewPieces: []
   };
 
   var app = document.getElementById("app");
@@ -597,7 +719,43 @@
     if (state.screen === "playing") return renderPlaying();
     if (state.screen === "gameOver") return renderGameOver();
     if (state.screen === "settings") return renderSettings();
+    if (state.screen === "achievements") return renderAchievements();
   }
+
+  // ---------- Puzzle artwork ----------
+  // Single neon illustration sliced into a 5x4 grid; no external file needed.
+  var PUZZLE_IMAGE = "data:image/svg+xml;utf8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">' +
+    '<defs>' +
+      '<radialGradient id="bg" cx="30%" cy="20%" r="90%">' +
+        '<stop offset="0%" stop-color="#241238"/>' +
+        '<stop offset="100%" stop-color="#0a0e1a"/>' +
+      '</radialGradient>' +
+      '<radialGradient id="sun" cx="50%" cy="50%" r="50%">' +
+        '<stop offset="0%" stop-color="#ff8fd6"/>' +
+        '<stop offset="45%" stop-color="#ff2d78"/>' +
+        '<stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>' +
+      '</radialGradient>' +
+      '<linearGradient id="cyanGlow" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#00e5ff"/>' +
+        '<stop offset="100%" stop-color="#3ec9ff" stop-opacity="0.2"/>' +
+      '</linearGradient>' +
+    '</defs>' +
+    '<rect width="500" height="400" fill="url(#bg)"/>' +
+    '<circle cx="250" cy="190" r="120" fill="url(#sun)"/>' +
+    '<circle cx="250" cy="190" r="70" fill="none" stroke="#00e5ff" stroke-width="2" opacity="0.55"/>' +
+    '<circle cx="250" cy="190" r="95" fill="none" stroke="#ff4fd8" stroke-width="1.5" opacity="0.4"/>' +
+    '<path d="M0 320 Q125 260 250 300 T500 290 V400 H0 Z" fill="url(#cyanGlow)" opacity="0.5"/>' +
+    '<path d="M0 360 Q140 320 260 350 T500 340 V400 H0 Z" fill="#a855f7" opacity="0.35"/>' +
+    '<g fill="#ffffff">' +
+      '<circle cx="60" cy="60" r="2"/><circle cx="120" cy="40" r="1.4"/><circle cx="400" cy="70" r="2"/>' +
+      '<circle cx="440" cy="120" r="1.6"/><circle cx="80" cy="150" r="1.4"/><circle cx="340" cy="50" r="1.8"/>' +
+      '<circle cx="460" cy="40" r="1.2"/><circle cx="30" cy="250" r="1.6"/><circle cx="470" cy="230" r="1.8"/>' +
+    '</g>' +
+    '<text x="250" y="200" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="34" font-weight="900" fill="#ffffff" style="text-shadow:0 0 20px #00e5ff;">MATCH</text>' +
+    '<text x="250" y="235" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="34" font-weight="900" fill="#ffffff">MADNESS</text>' +
+    '</svg>'
+  );
 
   // ---------- HOME ----------
   function renderHome() {
@@ -640,6 +798,7 @@
         sourcePickerHtml +
         '<div class="stat-line" id="poolCountLine">Слов в игре: ' + pool.length + '</div>' +
         '<button class="btn" id="startBtn">Начать</button>' +
+        '<button class="btn secondary" id="achievementsBtn">🧩 Достижения (' + loadUnlockedCount() + '/' + PUZZLE_PIECES + ')</button>' +
         '<button class="btn secondary" id="settingsBtn">Настройки слов</button>' +
       '</div>';
 
@@ -651,8 +810,54 @@
     });
 
     document.getElementById("startBtn").onclick = startGame;
+    document.getElementById("achievementsBtn").onclick = function () {
+      state.screen = "achievements";
+      render();
+    };
     document.getElementById("settingsBtn").onclick = function () {
       state.screen = "settings";
+      render();
+    };
+  }
+
+  // ---------- ACHIEVEMENTS (all-time puzzle) ----------
+  function puzzleCellStyle(index) {
+    var col = index % PUZZLE_COLS;
+    var row = Math.floor(index / PUZZLE_COLS);
+    var posX = (col / (PUZZLE_COLS - 1)) * 100;
+    var posY = (row / (PUZZLE_ROWS - 1)) * 100;
+    return 'background-image:url(' + PUZZLE_IMAGE + ');' +
+      'background-size:' + (PUZZLE_COLS * 100) + '% ' + (PUZZLE_ROWS * 100) + '%;' +
+      'background-position:' + posX + '% ' + posY + '%;';
+  }
+
+  function renderAchievements() {
+    var total = loadLifetimeScore();
+    var unlocked = puzzleUnlockedCells();
+    var unlockedCount = loadUnlockedCount();
+    var nextTarget = Math.min(PUZZLE_PIECES * PUZZLE_STEP, (unlockedCount + 1) * PUZZLE_STEP);
+    var complete = unlockedCount >= PUZZLE_PIECES;
+
+    var cellsHtml = "";
+    for (var i = 0; i < PUZZLE_PIECES; i++) {
+      if (unlocked[i]) {
+        cellsHtml += '<div class="puzzle-cell unlocked" style="' + puzzleCellStyle(i) + '"></div>';
+      } else {
+        cellsHtml += '<div class="puzzle-cell locked"></div>';
+      }
+    }
+
+    app.innerHTML =
+      '<div class="screen" style="justify-content:flex-start;">' +
+        '<h2>🧩 Достижения</h2>' +
+        '<p>Каждые ' + PUZZLE_STEP + ' очков за всё время игры открывают кусочек картинки.</p>' +
+        '<div class="puzzle-grid">' + cellsHtml + '</div>' +
+        '<div class="stat-line">Очков всего: ' + total + (complete ? ' · картинка собрана полностью!' : ' · до следующего кусочка: ' + (nextTarget - total)) + '</div>' +
+        '<button class="btn secondary" id="backBtn">Назад</button>' +
+      '</div>';
+
+    document.getElementById("backBtn").onclick = function () {
+      state.screen = "home";
       render();
     };
   }
@@ -672,6 +877,7 @@
     state.selectedLeft = null;
     state.selectedRight = null;
     state.busy = false;
+    state.sessionNewPieces = [];
     state.screen = "playing";
 
     startCycle();
@@ -811,6 +1017,8 @@
       state.score += SCORE_CORRECT;
       state.matchedCount += 1;
       state.timeLeft += TIME_BONUS;
+      var justUnlocked = addLifetimePoints(SCORE_CORRECT);
+      if (justUnlocked.length) state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked);
       leftBtn.classList.add("correct");
       rightBtn.classList.add("correct");
       updateTimerDisplay();
@@ -897,6 +1105,17 @@
         '<div class="big-score">' + state.score + '</div>' +
         '<p>итоговый счёт - замэчено ' + pluralWords(state.matchedCount) + '</p>' +
         (state.isNewRecord ? '<p style="color:#58CC02;font-weight:800;">Новый рекорд!</p>' : '') +
+        (state.sessionNewPieces.length ? (
+          '<div class="piece-reward">' +
+            '<div class="piece-reward-title">' + (state.sessionNewPieces.length > 1 ? 'Новые кусочки пазла!' : 'Новый кусочек пазла!') + '</div>' +
+            '<div class="piece-reward-row">' +
+              state.sessionNewPieces.map(function (idx, i) {
+                return '<div class="puzzle-cell unlocked piece-pop" style="' + puzzleCellStyle(idx) + 'animation-delay:' + (i * 0.12) + 's;"></div>';
+              }).join("") +
+            '</div>' +
+            '<button class="btn small secondary" id="viewPuzzleBtn" style="width:auto;margin-top:6px;">Смотреть пазл (' + loadUnlockedCount() + '/' + PUZZLE_PIECES + ')</button>' +
+          '</div>'
+        ) : '') +
         (usedWords.length ? (
           '<p style="margin-top:8px;">Отметь слова, которые не зашли - они больше не будут появляться:</p>' +
           '<div class="reject-list">' + listHtml + '</div>'
@@ -931,6 +1150,14 @@
       state.screen = "home";
       render();
     };
+    var viewPuzzleBtn = document.getElementById("viewPuzzleBtn");
+    if (viewPuzzleBtn) {
+      viewPuzzleBtn.onclick = function () {
+        commitRejected(rejectedNow);
+        state.screen = "achievements";
+        render();
+      };
+    }
   }
 
   function commitRejected(rejectedNow) {
