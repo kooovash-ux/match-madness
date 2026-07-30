@@ -1274,6 +1274,7 @@
         '</div>' +
         '<div class="settings-panel">' + body + '</div>' +
         '<button class="btn secondary" id="backBtn">Назад</button>' +
+        '<button class="btn secondary" id="resetProgressBtn" style="border-color:rgba(255,59,92,.4);color:#ff8a9e;">Сбросить весь прогресс</button>' +
       '</div>';
 
     Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (btn) {
@@ -1282,6 +1283,13 @@
         render();
       };
     });
+
+    document.getElementById("resetProgressBtn").onclick = function () {
+      if (!confirm("Точно сбросить рекорд, пазл и лучший результат за раунд? Это нельзя отменить.")) return;
+      [LS_RECORD, LS_LIFETIME_SCORE, LS_PUZZLE_PERMS].forEach(function (k) { localStorage.removeItem(k); });
+      state.screen = "home";
+      render();
+    };
 
     document.getElementById("backBtn").onclick = function () {
       state.screen = "home";
