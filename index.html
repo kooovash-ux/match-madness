@@ -624,17 +624,20 @@
   var SCORE_CORRECT = 10;
   var SCORE_WRONG = 5;
 
-  // ---------- Puzzle (all-time cumulative reward, multi-picture) ----------
+  // ---------- Puzzle (best-ever single-round score reward, multi-picture) ----------
+  // Pieces are NOT cumulative across games - they unlock only when your best-ever
+  // score in a SINGLE round crosses a new threshold (2000, 4000, 6000, ...).
+  // Five mediocre 1900-point runs unlock nothing beyond what one 1900 run would.
   var PUZZLE_COLS = 5;
   var PUZZLE_ROWS = 4;
   var PUZZLE_PIECES = PUZZLE_COLS * PUZZLE_ROWS; // 20 per picture
-  var PUZZLE_STEP = 100; // points per piece (100 => 1 piece, < 100 => 0)
+  var PUZZLE_STEP = 2000; // points per piece — 20 pieces per picture = 40000 needed for one full picture
   var PUZZLE_IMAGES = [
     "2917197433_preview_1142594.jpg",
-    "140470-electronic_entertainment_expo-avtomobil-asfalt-mortal_kombat_11-kiberpank_2077-1920x1080.jpg",
-    "thumb-1920-1299981.jpg"
+    "batmobile-concept-car-with-neon-lights.jpg",
+    "illustration-rain-futuristic-city.jpg"
   ];
-  var LS_LIFETIME_SCORE = "mm_lifetime_score";
+  var LS_LIFETIME_SCORE = "mm_best_round_score";
   var LS_PUZZLE_PERMS = "mm_puzzle_perms";
 
   function loadLifetimeScore() {
@@ -674,11 +677,15 @@
     }
     return perms[pictureIndex];
   }
-  // Adds points; returns array of {picture, cell} unlocked this call (for reveal).
-  function addLifetimePoints(points) {
-    var before = globalPiecesUnlocked();
-    saveLifetimeScore(loadLifetimeScore() + points);
-    var after = globalPiecesUnlocked();
+  // Call with the CURRENT round score (not points to add). Only advances the
+  // best-ever score, and only unlocks pieces if that pushes past a new 2000-point
+  // threshold. Returns array of {picture, cell} unlocked this call (for reveal).
+  function updateBestRoundScore(currentRoundScore) {
+    var prevBest = loadLifetimeScore();
+    if (currentRoundScore <= prevBest) return [];
+    var before = Math.floor(prevBest / PUZZLE_STEP);
+    saveLifetimeScore(currentRoundScore);
+    var after = Math.floor(currentRoundScore / PUZZLE_STEP);
     var just = [];
     for (var g = before; g < after; g++) {
       var pic = Math.floor(g / PUZZLE_PIECES);
@@ -868,9 +875,9 @@
     app.innerHTML =
       '<div class="screen" style="justify-content:flex-start;">' +
         '<h2>🧩 Достижения</h2>' +
-        '<p>Каждые ' + PUZZLE_STEP + ' очков открывают кусочек. Картина №' + (picIndex + 1) + ' — ' + count + '/' + PUZZLE_PIECES + '.</p>' +
+        '<p>Кусочек открывается, когда твой лучший результат ЗА ОДИН РАУНД впервые пересекает очередные ' + PUZZLE_STEP + ' очков. Картина №' + (picIndex + 1) + ' — ' + count + '/' + PUZZLE_PIECES + '.</p>' +
         '<div class="puzzle-grid">' + cellsHtml + '</div>' +
-        '<div class="stat-line">Очков всего: ' + total + ' · до следующего кусочка: ' + toNext + '</div>' +
+        '<div class="stat-line">Лучший результат за раунд: ' + total + ' · до следующего кусочка: ' + toNext + '</div>' +
         collectedHtml +
         '<button class="btn secondary" id="backBtn">Назад</button>' +
       '</div>';
@@ -1060,7 +1067,7 @@
       state.score += SCORE_CORRECT;
       state.matchedCount += 1;
       state.timeLeft = Math.min(MAX_TIME, state.timeLeft + TIME_BONUS);
-      var justUnlocked = addLifetimePoints(SCORE_CORRECT);
+      var justUnlocked = updateBestRoundScore(state.score);
       if (justUnlocked.length) state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked);
       leftBtn.classList.add("correct");
       rightBtn.classList.add("correct");
