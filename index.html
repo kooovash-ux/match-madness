@@ -880,12 +880,13 @@
 
     var introHtml, statHtml, gridHtml;
     if (allDone) {
-      introHtml = '<p>Все ' + PUZZLE_IMAGES.length + ' картины собраны полностью! Новых кусочков в этой версии игры больше нет — просто любуйся коллекцией ниже.</p>';
-      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + '</div>';
+      introHtml = '<p>Собрана вся коллекция — все ' + PUZZLE_IMAGES.length + ' картины готовы. Новые кусочки больше не открываются, но можно ставить личные рекорды дальше.</p>';
+      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
       gridHtml = "";
     } else {
-      introHtml = '<p>Кусочек открывается, когда твой лучший результат за один раунд впервые пересекает очередные ' + PUZZLE_STEP + ' очков. Идёт картина №' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + ' — собрано ' + count + '/' + PUZZLE_PIECES + ' кусочков.</p>';
-      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' · до следующего кусочка: ' + toNext + '</div>';
+      introHtml = '<p>Собери ' + count + ' из ' + PUZZLE_PIECES + ' кусочков картины №' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + '. Новый кусочек открывается за каждые ' + PUZZLE_STEP + ' очков личного рекорда в одном раунде.</p>' +
+        '<p>До следующего кусочка: ' + toNext + ' очков.</p>';
+      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
       gridHtml = '<div class="puzzle-grid">' + cellsHtml + '</div>';
     }
 
