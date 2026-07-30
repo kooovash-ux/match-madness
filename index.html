@@ -647,8 +647,31 @@
     localStorage.setItem(LS_LIFETIME_SCORE, String(v));
   }
   var MAX_TOTAL_PIECES = PUZZLE_IMAGES.length * PUZZLE_PIECES; // caps progress at 3 full pictures
+
+  // Picture 1 is always earnable. Picture 2 requires at least "Элементарный"
+  // (A2) selected as a word source right now; picture 3 requires at least
+  // "Средний" (B1). This is checked against the CURRENT source selection, not
+  // whatever was selected when the points were earned, so switching levels
+  // instantly reveals (or hides) already-earned pieces beyond picture 1.
+  var LEVEL_TIER = { a1: 0, a2: 1, b1: 2, b2: 3, c1: 4 };
+  function currentLevelTier() {
+    var selected = loadSelectedSources();
+    var maxTier = 0; // "custom"-only (or nothing recognized) behaves like A1: picture 1 only
+    selected.forEach(function (key) {
+      if (LEVEL_TIER.hasOwnProperty(key) && LEVEL_TIER[key] > maxTier) maxTier = LEVEL_TIER[key];
+    });
+    return maxTier;
+  }
+  function piecesCapForCurrentLevel() {
+    var tier = currentLevelTier();
+    if (tier >= LEVEL_TIER.b1) return MAX_TOTAL_PIECES;      // B1+ unlocks all 3 pictures
+    if (tier >= LEVEL_TIER.a2) return PUZZLE_PIECES * 2;      // A2 unlocks pictures 1-2
+    return PUZZLE_PIECES;                                     // A1 (or custom only) unlocks picture 1
+  }
   function globalPiecesUnlocked() {
-    return Math.min(MAX_TOTAL_PIECES, Math.floor(loadLifetimeScore() / PUZZLE_STEP));
+    var raw = Math.floor(loadLifetimeScore() / PUZZLE_STEP);
+    var cap = Math.min(MAX_TOTAL_PIECES, piecesCapForCurrentLevel());
+    return Math.min(raw, cap);
   }
   function completedPicturesCount() {
     return Math.floor(globalPiecesUnlocked() / PUZZLE_PIECES);
@@ -688,9 +711,10 @@
   function updateBestRoundScore(currentRoundScore) {
     var prevBest = loadLifetimeScore();
     if (currentRoundScore <= prevBest) return [];
-    var before = Math.min(MAX_TOTAL_PIECES, Math.floor(prevBest / PUZZLE_STEP));
+    var cap = Math.min(MAX_TOTAL_PIECES, piecesCapForCurrentLevel());
+    var before = Math.min(cap, Math.floor(prevBest / PUZZLE_STEP));
     saveLifetimeScore(currentRoundScore);
-    var after = Math.min(MAX_TOTAL_PIECES, Math.floor(currentRoundScore / PUZZLE_STEP));
+    var after = Math.min(cap, Math.floor(currentRoundScore / PUZZLE_STEP));
     var just = [];
     for (var g = before; g < after; g++) {
       var pic = Math.floor(g / PUZZLE_PIECES);
@@ -855,6 +879,9 @@
     var completed = completedPicturesCount();
     var allDone = allPicturesCollected();
     var toNext = (globalPiecesUnlocked() + 1) * PUZZLE_STEP - total;
+    var cap = piecesCapForCurrentLevel();
+    var levelLocked = !allDone && globalPiecesUnlocked() >= cap && cap < MAX_TOTAL_PIECES;
+    var neededLevelLabel = cap === PUZZLE_PIECES ? LEVEL_LABELS.a2 : LEVEL_LABELS.b1;
 
     var cellsHtml = "";
     for (var i = 0; i < PUZZLE_PIECES; i++) {
@@ -883,6 +910,10 @@
       introHtml = '<p>Собрана вся коллекция — все ' + PUZZLE_IMAGES.length + ' картины готовы. Новые кусочки больше не открываются, но можно ставить личные рекорды дальше.</p>';
       statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
       gridHtml = "";
+    } else if (levelLocked) {
+      introHtml = '<p>Картина №' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + ' пока заблокирована: включи базу «' + neededLevelLabel + '» или выше в настройках, чтобы открывать её кусочки. Очки ты уже набрал(а) — они посчитаются, как только выберешь нужный уровень.</p>';
+      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
+      gridHtml = '<div class="puzzle-grid">' + cellsHtml + '</div>';
     } else {
       introHtml = '<p>Собери ' + count + ' из ' + PUZZLE_PIECES + ' кусочков картины №' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + '. Новый кусочек открывается за каждые ' + PUZZLE_STEP + ' очков личного рекорда в одном раунде.</p>' +
         '<p>До следующего кусочка: ' + toNext + ' очков.</p>';
@@ -1062,6 +1093,15 @@
 
     if (btn.classList.contains("matched")) return;
     if (btn.disabled) return;
+
+    var currentlySelectedId = side === "left" ? state.selectedLeft : state.selectedRight;
+    if (currentlySelectedId === id && btn.classList.contains("selected")) {
+      // Tapping the already-selected card again deselects it.
+      btn.classList.remove("selected");
+      if (side === "left") state.selectedLeft = null;
+      else state.selectedRight = null;
+      return;
+    }
 
     Array.prototype.forEach.call(document.querySelectorAll(".card[data-side='" + side + "']"), function (b) {
       b.classList.remove("selected");
