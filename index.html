@@ -147,10 +147,10 @@
     background: rgba(255,45,120,.10);
   }
   .card.correct {
-    animation: correctFlash .35s var(--ease-out) both;
+    animation: correctFlash .15s var(--ease-out) both;
   }
   .card.wrong {
-    animation: wrongShake .35s cubic-bezier(.36,.07,.19,.97) both;
+    animation: wrongShake .15s cubic-bezier(.36,.07,.19,.97) both;
   }
   .card.gone { opacity: 0; pointer-events: none; transform: scale(.8); }
   .card.matched {
@@ -617,10 +617,10 @@
 
   // ---------- Game state ----------
   var CYCLE_SIZE = 5;
-  var START_TIME = 60;
-  var MAX_TIME = 60;
-  var TIME_BONUS = 3;
-  var TIME_PENALTY = 8;
+  var START_TIME = 120;
+  var MAX_TIME = 120;
+  var TIME_BONUS = 5;
+  var TIME_PENALTY = 15;
   var SCORE_CORRECT = 10;
   var SCORE_WRONG = 5;
 
@@ -981,6 +981,10 @@
     state.busy = false;
   }
 
+  // Timer ticks twice as fast as real time (500ms per displayed second), so
+  // START_TIME/TIME_BONUS/TIME_PENALTY are all in "game seconds": divide by 2
+  // for the real-world duration (120 game sec = 60 real sec, 5 = 2.5, 15 = 7.5).
+  var TICK_MS = 500;
   function startTimer() {
     if (state.timerHandle) clearInterval(state.timerHandle);
     state.timerHandle = setInterval(function () {
@@ -991,7 +995,7 @@
         state.timeLeft = 0;
         timeUp();
       }
-    }, 1000);
+    }, TICK_MS);
   }
 
   function stopTimer() {
@@ -1109,9 +1113,9 @@
           setTimeout(function () {
             startCycle();
             render();
-          }, 400);
+          }, 130);
         }
-      }, 350);
+      }, 130);
     } else {
       state.score = Math.max(0, state.score - SCORE_WRONG);
       state.timeLeft = Math.max(0, state.timeLeft - TIME_PENALTY);
@@ -1123,7 +1127,7 @@
         setTimeout(function () {
           stopTimer();
           timeUp();
-        }, 350);
+        }, 130);
         return;
       }
       setTimeout(function () {
@@ -1132,7 +1136,7 @@
         state.selectedLeft = null;
         state.selectedRight = null;
         state.busy = false;
-      }, 350);
+      }, 130);
     }
   }
 
