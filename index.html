@@ -626,12 +626,12 @@
 
   // ---------- Puzzle (best-ever single-round score reward, multi-picture) ----------
   // Pieces are NOT cumulative across games - they unlock only when your best-ever
-  // score in a SINGLE round crosses a new threshold (2000, 4000, 6000, ...).
-  // Five mediocre 1900-point runs unlock nothing beyond what one 1900 run would.
+  // score in a SINGLE round crosses a new threshold. Each 100 points = 1 piece,
+  // so a full 20-piece picture completes at 2000, the next at 4000, then 6000...
   var PUZZLE_COLS = 5;
   var PUZZLE_ROWS = 4;
   var PUZZLE_PIECES = PUZZLE_COLS * PUZZLE_ROWS; // 20 per picture
-  var PUZZLE_STEP = 2000; // points per piece — 20 pieces per picture = 40000 needed for one full picture
+  var PUZZLE_STEP = 100; // points per piece — 20 pieces per picture = 2000 needed for one full picture
   var PUZZLE_IMAGES = [
     "2917197433_preview_1142594.jpg",
     "batmobile-concept-car-with-neon-lights.jpg",
