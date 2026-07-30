@@ -118,9 +118,9 @@
     background: rgba(18,24,40,.55);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    transition: transform .16s var(--spring), opacity .2s var(--ease-out),
-                box-shadow .16s var(--ease-out), border-color .16s var(--ease-out),
-                background .2s var(--ease-out);
+    transition: transform .09s var(--spring), opacity .15s var(--ease-out),
+                box-shadow .09s var(--ease-out), border-color .09s var(--ease-out),
+                background .15s var(--ease-out);
     animation: cardIn .19s var(--ease-out) both;
   }
   .card.en {
@@ -147,10 +147,10 @@
     background: rgba(255,45,120,.10);
   }
   .card.correct {
-    animation: correctFlash .15s var(--ease-out) both;
+    animation: correctFlash .1s var(--ease-out) both;
   }
   .card.wrong {
-    animation: wrongShake .15s cubic-bezier(.36,.07,.19,.97) both;
+    animation: wrongShake .1s cubic-bezier(.36,.07,.19,.97) both;
   }
   .card.gone { opacity: 0; pointer-events: none; transform: scale(.8); }
   .card.matched {
@@ -1060,8 +1060,8 @@
     var side = btn.getAttribute("data-side");
     var id = parseInt(btn.getAttribute("data-id"), 10);
 
-    if (state.busy) return;
     if (btn.classList.contains("matched")) return;
+    if (btn.disabled) return;
 
     Array.prototype.forEach.call(document.querySelectorAll(".card[data-side='" + side + "']"), function (b) {
       b.classList.remove("selected");
@@ -1076,14 +1076,18 @@
     }
   }
 
+  // No "busy" lock: game state (matched/selected) updates instantly so the
+  // next pair can be tapped right away. The flash/shake animation is purely
+  // cosmetic and plays on top without blocking input.
   function checkMatch() {
-    state.busy = true;
     var leftId = state.selectedLeft;
     var rightId = state.selectedRight;
     var leftBtn = document.querySelector(".card[data-side='left'][data-id='" + leftId + "']");
     var rightBtn = document.querySelector(".card[data-side='right'][data-id='" + rightId + "']");
 
     var isMatch = leftId === rightId;
+    state.selectedLeft = null;
+    state.selectedRight = null;
 
     if (isMatch) {
       state.score += SCORE_CORRECT;
@@ -1091,31 +1095,33 @@
       state.timeLeft = Math.min(MAX_TIME, state.timeLeft + TIME_BONUS);
       var justUnlocked = updateBestRoundScore(state.score);
       if (justUnlocked.length) state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked);
+
+      var item = state.board.filter(function (c) { return c.id === leftId; })[0];
+      if (item) item.matched = true;
+      leftBtn.classList.remove("selected");
+      rightBtn.classList.remove("selected");
       leftBtn.classList.add("correct");
       rightBtn.classList.add("correct");
+      leftBtn.disabled = true;
+      rightBtn.disabled = true;
       updateTimerDisplay();
       updateScoreDisplay();
+
+      // Purely cosmetic swap from the flash to the dimmed "matched" look.
       setTimeout(function () {
-        var item = state.board.filter(function (c) { return c.id === leftId; })[0];
-        if (item) item.matched = true;
-        leftBtn.classList.remove("correct", "selected");
-        rightBtn.classList.remove("correct", "selected");
+        leftBtn.classList.remove("correct");
+        rightBtn.classList.remove("correct");
         leftBtn.classList.add("matched");
         rightBtn.classList.add("matched");
-        leftBtn.disabled = true;
-        rightBtn.disabled = true;
-        state.selectedLeft = null;
-        state.selectedRight = null;
-        state.busy = false;
+      }, 100);
 
-        var allMatched = state.board.every(function (c) { return c.matched; });
-        if (allMatched) {
-          setTimeout(function () {
-            startCycle();
-            render();
-          }, 130);
-        }
-      }, 130);
+      var allMatched = state.board.every(function (c) { return c.matched; });
+      if (allMatched) {
+        setTimeout(function () {
+          startCycle();
+          render();
+        }, 80);
+      }
     } else {
       state.score = Math.max(0, state.score - SCORE_WRONG);
       state.timeLeft = Math.max(0, state.timeLeft - TIME_PENALTY);
@@ -1127,16 +1133,13 @@
         setTimeout(function () {
           stopTimer();
           timeUp();
-        }, 130);
+        }, 80);
         return;
       }
       setTimeout(function () {
         leftBtn.classList.remove("selected", "wrong");
         rightBtn.classList.remove("selected", "wrong");
-        state.selectedLeft = null;
-        state.selectedRight = null;
-        state.busy = false;
-      }, 130);
+      }, 100);
     }
   }
 
