@@ -779,7 +779,8 @@
     selectedRight: null,
     busy: false,
     settingsTab: "add",
-    sessionNewPieces: []
+    sessionNewPieces: [],
+    paused: false
   };
 
   var app = document.getElementById("app");
@@ -977,6 +978,7 @@
     state.selectedRight = null;
     state.busy = false;
     state.sessionNewPieces = [];
+    state.paused = false;
     state.screen = "playing";
 
     startCycle();
@@ -1065,19 +1067,50 @@
       return leftCard + rightCard;
     }).join("");
 
+    var pauseOverlayHtml = state.paused ?
+      '<div id="pauseOverlay" style="position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,14,26,.88);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);">' +
+        '<div style="font-family:\'Orbitron\',sans-serif;font-size:20px;font-weight:800;color:#fff;text-shadow:0 0 12px rgba(0,229,255,.5);">Пауза</div>' +
+        '<button class="btn" id="resumeBtn" style="width:auto;padding:12px 28px;">Продолжить</button>' +
+      '</div>' : '';
+
     app.innerHTML =
       '<div class="topbar">' +
-        '<div class="timer" id="timerDisplay"></div>' +
-        '<div class="score" id="scoreDisplay">' + state.score + ' очк.</div>' +
+        '<div class="timer" id="timerDisplay" style="cursor:pointer;"></div>' +
+        '<div style="display:flex;align-items:center;gap:6px;">' +
+          '<button id="exitToHomeBtn" aria-label="Выйти в меню" style="background:none;border:none;color:rgba(140,150,184,.3);font-size:11px;cursor:pointer;padding:4px;line-height:1;">←</button>' +
+          '<div class="score" id="scoreDisplay">' + state.score + ' очк.</div>' +
+        '</div>' +
       '</div>' +
       '<div class="round-label">Смэтчено: ' + state.matchedCount + '</div>' +
-      '<div class="board">' + rowsHtml + '</div>';
+      '<div class="board">' + rowsHtml + '</div>' +
+      pauseOverlayHtml;
 
     updateTimerDisplay();
 
     Array.prototype.forEach.call(document.querySelectorAll(".card"), function (btn) {
       btn.onclick = onCardClick;
     });
+
+    document.getElementById("exitToHomeBtn").onclick = function () {
+      stopTimer();
+      state.screen = "home";
+      render();
+    };
+
+    document.getElementById("timerDisplay").onclick = function () {
+      if (state.paused) return; // resuming happens via the overlay button only
+      stopTimer();
+      state.paused = true;
+      render();
+    };
+
+    if (state.paused) {
+      document.getElementById("resumeBtn").onclick = function () {
+        state.paused = false;
+        render();
+        startTimer();
+      };
+    }
   }
 
   function escapeHtml(s) {
