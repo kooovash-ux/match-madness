@@ -1157,7 +1157,7 @@
         '</div>' +
       '</div>' +
       '<div class="round-label">Смэтчено: ' + state.matchedCount + '</div>' +
-      '<div id="hintBanner" style="display:none;text-align:center;font-size:13px;color:#fff;background:rgba(255,200,0,.1);border:1px solid rgba(255,200,0,.3);border-radius:10px;padding:6px 10px;margin-bottom:10px;"></div>' +
+      '<div id="hintBanner" style="visibility:hidden;text-align:center;font-size:13px;color:#fff;background:rgba(255,200,0,.1);border:1px solid rgba(255,200,0,.3);border-radius:10px;padding:6px 10px;margin-bottom:10px;min-height:32px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"></div>' +
       '<div style="display:flex;justify-content:center;margin-bottom:10px;">' +
         '<button id="hintBtn" style="background:none;border:1px solid rgba(255,200,0,.35);border-radius:999px;color:rgba(255,220,120,.85);font-size:11px;font-weight:700;letter-spacing:.5px;padding:5px 14px;cursor:pointer;text-transform:none;">💡 ' + state.hintsLeft + '</button>' +
       '</div>' +
@@ -1211,12 +1211,12 @@
     var el = document.getElementById("hintBanner");
     if (!el) return;
     el.textContent = text;
-    el.style.display = "block";
+    el.style.visibility = "visible";
     el.style.color = muted ? "rgba(200,200,210,.7)" : "#fff";
     if (hintBannerTimer) clearTimeout(hintBannerTimer);
     hintBannerTimer = setTimeout(function () {
       var el2 = document.getElementById("hintBanner");
-      if (el2) el2.style.display = "none";
+      if (el2) el2.style.visibility = "hidden";
     }, 3000);
   }
   function showHint() {
