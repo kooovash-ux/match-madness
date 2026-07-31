@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Match Madness</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -551,6 +552,45 @@
   var LEVEL_WORDS = { a1: A1_WORDS, a2: A2_WORDS, b1: B1_WORDS, b2: B2_WORDS, c1: C1_WORDS };
   var LEVEL_LABELS = { a1: "Начинающий", a2: "Элементарный", b1: "Средний", b2: "Выше среднего", c1: "Продвинутый" };
 
+  // ---------- Telegram account sync (CloudStorage) ----------
+  // If running inside Telegram, progress (custom words, record, puzzle, etc.)
+  // is mirrored to the player's Telegram account via CloudStorage, so it's the
+  // same on phone and desktop. localStorage stays the instant local cache /
+  // fallback for when the page is opened outside Telegram (plain browser).
+  var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+  if (tg) { try { tg.ready(); } catch (e) {} }
+
+  function cloudSet(key, value) {
+    localStorage.setItem(key, value);
+    if (tg && tg.CloudStorage) {
+      try { tg.CloudStorage.setItem(key, value, function () {}); } catch (e) {}
+    }
+  }
+  function cloudRemove(key) {
+    localStorage.removeItem(key);
+    if (tg && tg.CloudStorage) {
+      try { tg.CloudStorage.removeItem(key, function () {}); } catch (e) {}
+    }
+  }
+  // Pulls the latest values from the Telegram account into localStorage before
+  // the app first renders, so switching devices shows the same progress.
+  function syncFromCloudThenRun(keys, done) {
+    if (!tg || !tg.CloudStorage) { done(); return; }
+    var finished = false;
+    var finish = function () { if (!finished) { finished = true; done(); } };
+    try {
+      tg.CloudStorage.getItems(keys, function (err, values) {
+        if (!err && values) {
+          keys.forEach(function (k) {
+            if (values[k]) localStorage.setItem(k, values[k]);
+          });
+        }
+        finish();
+      });
+    } catch (e) { finish(); }
+    setTimeout(finish, 1500); // don't block startup if Telegram is slow/unavailable
+  }
+
   var LS_CUSTOM = "mm_custom_words";
   var LS_REJECTED = "mm_rejected_words";
 
@@ -558,13 +598,13 @@
     try { return JSON.parse(localStorage.getItem(LS_CUSTOM) || "[]"); } catch (e) { return []; }
   }
   function saveCustomWords(list) {
-    localStorage.setItem(LS_CUSTOM, JSON.stringify(list));
+    cloudSet(LS_CUSTOM, JSON.stringify(list));
   }
   function loadRejected() {
     try { return JSON.parse(localStorage.getItem(LS_REJECTED) || "[]"); } catch (e) { return []; }
   }
   function saveRejected(list) {
-    localStorage.setItem(LS_REJECTED, JSON.stringify(list));
+    cloudSet(LS_REJECTED, JSON.stringify(list));
   }
 
   // ---------- Source selection (multi-select: any combo of a1/a2/b1/b2/custom) ----------
@@ -577,7 +617,7 @@
     return ["a1"]; // sensible default for a fresh install
   }
   function saveSelectedSources(list) {
-    localStorage.setItem(LS_SOURCES, JSON.stringify(list));
+    cloudSet(LS_SOURCES, JSON.stringify(list));
   }
   function toggleSource(key) {
     var list = loadSelectedSources();
@@ -644,7 +684,7 @@
     return parseInt(localStorage.getItem(LS_LIFETIME_SCORE) || "0", 10) || 0;
   }
   function saveLifetimeScore(v) {
-    localStorage.setItem(LS_LIFETIME_SCORE, String(v));
+    cloudSet(LS_LIFETIME_SCORE, String(v));
   }
   var MAX_TOTAL_PIECES = PUZZLE_IMAGES.length * PUZZLE_PIECES; // caps progress at 3 full pictures
 
@@ -693,7 +733,7 @@
     try { var r = JSON.parse(localStorage.getItem(LS_PUZZLE_PERMS) || "null"); if (Array.isArray(r)) return r; } catch (e) {}
     return [];
   }
-  function savePerms(a) { localStorage.setItem(LS_PUZZLE_PERMS, JSON.stringify(a)); }
+  function savePerms(a) { cloudSet(LS_PUZZLE_PERMS, JSON.stringify(a)); }
   function getPerm(pictureIndex) {
     var perms = loadPerms();
     if (!Array.isArray(perms[pictureIndex]) || perms[pictureIndex].length !== PUZZLE_PIECES) {
@@ -737,7 +777,7 @@
     try { return JSON.parse(localStorage.getItem(LS_RECORD) || "null"); } catch (e) { return null; }
   }
   function saveRecord(rec) {
-    localStorage.setItem(LS_RECORD, JSON.stringify(rec));
+    cloudSet(LS_RECORD, JSON.stringify(rec));
   }
   function pluralWords(n) {
     var n10 = n % 10, n100 = n % 100;
@@ -1077,7 +1117,7 @@
       '<div class="topbar">' +
         '<div class="timer" id="timerDisplay" style="cursor:pointer;"></div>' +
         '<div style="display:flex;align-items:center;gap:6px;">' +
-          '<button id="exitToHomeBtn" aria-label="Выйти в меню" style="background:none;border:none;color:rgba(140,150,184,.3);font-size:11px;cursor:pointer;padding:4px;line-height:1;">←</button>' +
+          '<button id="exitToHomeBtn" aria-label="Выйти в меню" style="background:none;border:none;color:rgba(140,150,184,.14);font-size:9px;cursor:pointer;padding:4px;line-height:1;">←</button>' +
           '<div class="score" id="scoreDisplay">' + state.score + ' очк.</div>' +
         '</div>' +
       '</div>' +
@@ -1384,7 +1424,7 @@
 
     document.getElementById("resetProgressBtn").onclick = function () {
       if (!confirm("Точно сбросить рекорд, пазл и лучший результат за раунд? Это нельзя отменить.")) return;
-      [LS_RECORD, LS_LIFETIME_SCORE, LS_PUZZLE_PERMS].forEach(function (k) { localStorage.removeItem(k); });
+      [LS_RECORD, LS_LIFETIME_SCORE, LS_PUZZLE_PERMS].forEach(function (k) { cloudRemove(k); });
       state.screen = "home";
       render();
     };
@@ -1451,7 +1491,7 @@
     }
   }
 
-  render();
+  syncFromCloudThenRun([LS_CUSTOM, LS_REJECTED, LS_SOURCES, LS_RECORD, LS_LIFETIME_SCORE, LS_PUZZLE_PERMS], render);
 })();
 </script>
 </body>
