@@ -594,17 +594,40 @@
   var LS_CUSTOM = "mm_custom_words";
   var LS_REJECTED = "mm_rejected_words";
 
+  // Compact "en|ru" per line instead of JSON - no braces/quotes/keys overhead,
+  // which roughly doubles how many words fit under Telegram CloudStorage's
+  // 4096-char-per-value limit. Old JSON-formatted values (from before this
+  // change) are still readable so nobody's existing list breaks.
+  function serializeWordList(list) {
+    return list.map(function (w) {
+      return String(w.en).replace(/[|\n]/g, " ") + "|" + String(w.ru).replace(/[|\n]/g, " ");
+    }).join("\n");
+  }
+  function parseWordList(raw) {
+    if (!raw) return [];
+    var trimmed = raw.trim();
+    if (!trimmed) return [];
+    if (trimmed.charAt(0) === "[") {
+      try { return JSON.parse(trimmed); } catch (e) { return []; }
+    }
+    return trimmed.split("\n").map(function (line) {
+      var idx = line.indexOf("|");
+      if (idx === -1) return null;
+      return { en: line.slice(0, idx), ru: line.slice(idx + 1) };
+    }).filter(function (w) { return w && w.en; });
+  }
+
   function loadCustomWords() {
-    try { return JSON.parse(localStorage.getItem(LS_CUSTOM) || "[]"); } catch (e) { return []; }
+    return parseWordList(localStorage.getItem(LS_CUSTOM));
   }
   function saveCustomWords(list) {
-    cloudSet(LS_CUSTOM, JSON.stringify(list));
+    cloudSet(LS_CUSTOM, serializeWordList(list));
   }
   function loadRejected() {
-    try { return JSON.parse(localStorage.getItem(LS_REJECTED) || "[]"); } catch (e) { return []; }
+    return parseWordList(localStorage.getItem(LS_REJECTED));
   }
   function saveRejected(list) {
-    cloudSet(LS_REJECTED, JSON.stringify(list));
+    cloudSet(LS_REJECTED, serializeWordList(list));
   }
 
   // ---------- Source selection (multi-select: any combo of a1/a2/b1/b2/custom) ----------
