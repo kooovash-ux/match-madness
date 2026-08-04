@@ -46,9 +46,11 @@
     max-width: 480px;
     margin: 0 auto;
     padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
   }
 
   .topbar {
@@ -148,10 +150,10 @@
     background: rgba(255,45,120,.10);
   }
   .card.correct {
-    animation: correctFlash .1s var(--ease-out) both;
+    animation: correctFlash .32s var(--ease-out) both;
   }
   .card.wrong {
-    animation: wrongShake .1s cubic-bezier(.36,.07,.19,.97) both;
+    animation: wrongShake .34s cubic-bezier(.36,.07,.19,.97) both;
   }
   .card.gone { opacity: 0; pointer-events: none; transform: scale(.8); }
   .card.matched {
@@ -225,6 +227,7 @@
     padding: 24px 8px;
     animation: screenIn .26s var(--ease-out) both;
   }
+  .screen > * { flex-shrink: 0; }
   .screen h1 {
     font-family:"Orbitron", sans-serif;
     font-size: 30px; margin: 0; font-weight:900; letter-spacing:1px;
@@ -851,6 +854,7 @@
     sessionNewPieces: [],
     paused: false,
     hintsLeft: 0,
+    hintsTotal: 0,
     hintMessage: null, // {en, hint} currently shown, or null
     hintedIds: {} // card ids that already cost a hint this round - re-showing them is free
   };
@@ -863,11 +867,90 @@
     if (state.screen === "gameOver") return renderGameOver();
     if (state.screen === "settings") return renderSettings();
     if (state.screen === "achievements") return renderAchievements();
+    if (state.screen === "stats") return renderStats();
+  }
+
+  // ---------- STATS ----------
+  function renderStats() {
+    var u = tgUser();
+    var record = loadRecord();
+    var best = record ? (record.score || 0) : 0;
+    var bestMatched = record ? (record.matched || 0) : 0;
+    var name = u ? (u.first_name || u.username || "Игрок") : "Гость";
+    var uname = u && u.username ? "@" + u.username : null;
+    var id = u ? u.id : "—";
+    var collected = completedPicturesCount();
+    var avatar = (u && u.photo_url)
+      ? '<span style="width:64px;height:64px;border-radius:50%;flex:none;background:url(' + u.photo_url + ') center/cover;box-shadow:0 0 0 2px rgba(0,229,255,.5),0 0 18px rgba(0,229,255,.4);"></span>'
+      : '<span style="width:64px;height:64px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:26px;color:#0a0e1a;background:linear-gradient(135deg,var(--cyan),var(--pink));box-shadow:0 0 18px rgba(0,229,255,.45);">' + String(name).charAt(0).toUpperCase() + '</span>';
+
+    function statCard(value, label, color) {
+      return '<div style="flex:1;min-width:0;background:rgba(18,24,40,.55);border:1.5px solid rgba(140,150,184,.25);border-radius:14px;padding:14px 10px;text-align:center;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,.3);">' +
+        '<div style="font-family:Orbitron,monospace;font-weight:800;font-size:26px;color:' + color + ';text-shadow:0 0 12px ' + color + '80;line-height:1;">' + value + '</div>' +
+        '<div style="font-family:Rajdhani,sans-serif;font-size:11px;color:var(--ink-dim);letter-spacing:1px;text-transform:uppercase;margin-top:6px;">' + label + '</div>' +
+      '</div>';
+    }
+
+    app.innerHTML =
+      '<div class="screen" style="justify-content:flex-start;gap:18px;">' +
+        '<h2>📊 Статистика</h2>' +
+        '<div style="display:flex;align-items:center;gap:14px;width:100%;max-width:340px;padding:14px;border-radius:16px;background:rgba(18,24,40,.55);border:1.5px solid rgba(0,229,255,.28);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 0 20px rgba(0,229,255,.15),0 6px 20px rgba(0,0,0,.35);">' +
+          avatar +
+          '<span style="flex:1;text-align:left;min-width:0;">' +
+            '<span style="display:block;font-family:Orbitron,sans-serif;font-weight:700;font-size:18px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + name + '</span>' +
+            (uname ? '<span style="display:block;font-family:Rajdhani,sans-serif;font-size:13px;color:var(--cyan);letter-spacing:.3px;">' + uname + '</span>' : '') +
+            '<span style="display:block;font-family:Rajdhani,sans-serif;font-size:12px;color:var(--ink-dim);letter-spacing:.5px;margin-top:2px;">ID ' + id + '</span>' +
+          '</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;width:100%;max-width:340px;">' +
+          statCard(best, "Рекорд очков", "#00e5ff") +
+          statCard(bestMatched, "Слов в рекорде", "#ff2d78") +
+        '</div>' +
+        '<div style="display:flex;gap:10px;width:100%;max-width:340px;">' +
+          statCard(collected, "Картин собрано", "#ffd24a") +
+          statCard(loadLifetimeScore(), "Очков всего", "#a855f7") +
+        '</div>' +
+        '<button class="btn secondary" id="statsBackBtn">Назад</button>' +
+      '</div>';
+
+    document.getElementById("statsBackBtn").onclick = function () {
+      state.screen = "home";
+      render();
+    };
   }
 
   // ---------- Puzzle artwork ----------
   // Single neon illustration sliced into a 5x4 grid; no external file needed.
   // puzzle images defined above as PUZZLE_IMAGES
+
+  // ---------- Telegram user identity ----------
+  function tgUser() {
+    try {
+      var u = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
+      return u || null;
+    } catch (e) { return null; }
+  }
+  function playerBadgeHtml() {
+    var u = tgUser();
+    var record = loadRecord();
+    var best = record ? (record.score || 0) : 0;
+    var name = u ? (u.first_name || u.username || "Игрок") : "Гость";
+    var id = u ? u.id : "—";
+    var avatar = (u && u.photo_url)
+      ? '<span style="width:38px;height:38px;border-radius:50%;flex:none;background:url(' + u.photo_url + ') center/cover;box-shadow:0 0 0 1.5px rgba(0,229,255,.5),0 0 12px rgba(0,229,255,.35);"></span>'
+      : '<span style="width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:16px;color:#0a0e1a;background:linear-gradient(135deg,var(--cyan),var(--pink));box-shadow:0 0 12px rgba(0,229,255,.4);">' + String(name).charAt(0).toUpperCase() + '</span>';
+    return '<div style="display:flex;align-items:center;gap:11px;width:100%;max-width:340px;padding:9px 13px;border-radius:14px;background:rgba(18,24,40,.55);border:1.5px solid rgba(140,150,184,.25);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,.3);">' +
+      avatar +
+      '<span style="flex:1;text-align:left;min-width:0;">' +
+        '<span style="display:block;font-family:Rajdhani,sans-serif;font-weight:700;font-size:15px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + name + '</span>' +
+        '<span style="display:block;font-family:Rajdhani,sans-serif;font-size:11px;color:var(--ink-dim);letter-spacing:.3px;">ID ' + id + '</span>' +
+      '</span>' +
+      '<span style="text-align:right;flex:none;">' +
+        '<span style="display:block;font-family:Orbitron,monospace;font-weight:800;font-size:19px;color:var(--cyan);text-shadow:0 0 10px rgba(0,229,255,.55);line-height:1;">' + best + '</span>' +
+        '<span style="display:block;font-family:Rajdhani,sans-serif;font-size:10px;color:var(--ink-dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">рекорд</span>' +
+      '</span>' +
+    '</div>';
+  }
 
   // ---------- HOME ----------
   function renderHome() {
@@ -902,16 +985,18 @@
     var pool = getActiveWordPool();
 
     app.innerHTML =
-      '<div class="screen">' +
+      '<div class="screen" style="gap:13px;justify-content:flex-start;padding-top:18px;">' +
         '<h1>Match Madness</h1>' +
-        '<p>Собери пары слов на скорость. Правильный ответ - время и очки. Ошибка - минус время.</p>' +
+        '<p>Собери пары слов на скорость. Верно — плюс время и очки, ошибка — минус время.</p>' +
         recordHtml +
-        '<p style="margin-top:4px;">Выбери одну или несколько баз слов:</p>' +
         sourcePickerHtml +
         '<div class="stat-line" id="poolCountLine">Слов в игре: ' + pool.length + '</div>' +
         '<button class="btn" id="startBtn">Начать</button>' +
-        '<button class="btn secondary" id="achievementsBtn">🧩 Достижения (' + (allPicturesCollected() ? "все " + PUZZLE_IMAGES.length + " картины!" : "картина " + (currentPictureIndex() + 1) + " · " + currentPiecesUnlocked() + "/" + PUZZLE_PIECES) + ')</button>' +
-        '<button class="btn secondary" id="settingsBtn">Настройки слов</button>' +
+        '<div style="display:flex;gap:10px;width:100%;max-width:280px;">' +
+          '<button class="btn secondary small" id="achievementsBtn" style="flex:1;">🧩 ' + (allPicturesCollected() ? "Все картины!" : "Пазл " + currentPiecesUnlocked() + "/" + PUZZLE_PIECES) + '</button>' +
+          '<button class="btn secondary small" id="settingsBtn" style="flex:1;">⚙ Слова</button>' +
+        '</div>' +
+        '<button class="btn secondary small" id="statsBtn" style="width:100%;max-width:280px;">📊 Статистика</button>' +
       '</div>';
 
     Array.prototype.forEach.call(document.querySelectorAll(".src-chip"), function (btn) {
@@ -928,6 +1013,10 @@
     };
     document.getElementById("settingsBtn").onclick = function () {
       state.screen = "settings";
+      render();
+    };
+    document.getElementById("statsBtn").onclick = function () {
+      state.screen = "stats";
       render();
     };
   }
@@ -980,17 +1069,16 @@
 
     var introHtml, statHtml, gridHtml;
     if (allDone) {
-      introHtml = '<p>Собрана вся коллекция — все ' + PUZZLE_IMAGES.length + ' картины готовы. Новые кусочки больше не открываются, но можно ставить личные рекорды дальше.</p>';
-      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
+      introHtml = '<p>Вся коллекция собрана — все ' + PUZZLE_IMAGES.length + ' картины готовы.</p>';
+      statHtml = '';
       gridHtml = "";
     } else if (levelLocked) {
-      introHtml = '<p>Картина №' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + ' пока заблокирована: включи базу «' + neededLevelLabel + '» или выше в настройках, чтобы открывать её кусочки. Очки ты уже набрал(а) — они посчитаются, как только выберешь нужный уровень.</p>';
-      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
+      introHtml = '<p>Картина №' + (picIndex + 1) + ' заблокирована: включи базу «' + neededLevelLabel + '» или выше в настройках.</p>';
+      statHtml = '';
       gridHtml = '<div class="puzzle-grid">' + cellsHtml + '</div>';
     } else {
-      introHtml = '<p>Собери ' + count + ' из ' + PUZZLE_PIECES + ' кусочков картины №' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + '. Новый кусочек открывается за каждые ' + PUZZLE_STEP + ' очков личного рекорда в одном раунде.</p>' +
-        '<p>До следующего кусочка: ' + toNext + ' очков.</p>';
-      statHtml = '<div class="stat-line">Лучший результат за раунд: ' + total + ' очков</div>';
+      introHtml = '<p>Картина ' + (picIndex + 1) + ' из ' + PUZZLE_IMAGES.length + ' · собрано ' + count + '/' + PUZZLE_PIECES + '<br>До следующего кусочка — ' + toNext + ' очков.</p>';
+      statHtml = '';
       gridHtml = '<div class="puzzle-grid">' + cellsHtml + '</div>';
     }
 
@@ -1052,6 +1140,7 @@
     state.sessionNewPieces = [];
     state.paused = false;
     state.hintsLeft = hintUsesForCurrentLevel();
+    state.hintsTotal = state.hintsLeft;
     state.hintMessage = null;
     state.hintedIds = {};
     state.screen = "playing";
@@ -1143,7 +1232,7 @@
     }).join("");
 
     var pauseOverlayHtml = state.paused ?
-      '<div id="pauseOverlay" style="position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,14,26,.88);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);">' +
+      '<div id="pauseOverlay" style="position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,14,26,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">' +
         '<div style="font-family:\'Orbitron\',sans-serif;font-size:20px;font-weight:800;color:#fff;text-shadow:0 0 12px rgba(0,229,255,.5);">Пауза</div>' +
         '<button class="btn" id="resumeBtn" style="width:auto;padding:12px 28px;">Продолжить</button>' +
       '</div>' : '';
@@ -1156,11 +1245,15 @@
           '<div class="score" id="scoreDisplay">' + state.score + ' очк.</div>' +
         '</div>' +
       '</div>' +
-      '<div class="round-label">Смэтчено: ' + state.matchedCount + '</div>' +
-      '<div id="hintBanner" style="visibility:hidden;text-align:center;font-size:13px;color:#fff;background:rgba(255,200,0,.1);border:1px solid rgba(255,200,0,.3);border-radius:10px;padding:6px 10px;margin-bottom:10px;min-height:32px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"></div>' +
-      '<div style="display:flex;justify-content:center;margin-bottom:10px;">' +
-        '<button id="hintBtn" style="background:none;border:1px solid rgba(255,200,0,.35);border-radius:999px;color:rgba(255,220,120,.85);font-size:11px;font-weight:700;letter-spacing:.5px;padding:5px 14px;cursor:pointer;text-transform:none;">💡 ' + state.hintsLeft + '</button>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">' +
+        '<div style="display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:8px 16px;border-radius:999px;background:rgba(0,229,255,.07);border:1.5px solid rgba(0,229,255,.4);box-shadow:0 0 14px rgba(0,229,255,.18);font-family:\'Orbitron\',sans-serif;font-weight:700;font-size:12px;letter-spacing:2px;color:#eaf2ff;white-space:nowrap;text-transform:uppercase;">' +
+          '<span style="font-size:16px;filter:drop-shadow(0 0 6px rgba(62,255,180,.7));">✓</span>' +
+          'MATCHED' +
+          '<span style="font-family:\'Orbitron\',monospace;font-weight:900;font-size:16px;letter-spacing:0;color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,.55);min-width:1.4em;text-align:center;">' + state.matchedCount + '</span>' +
+        '</div>' +
+        '<button id="hintBtn" style="display:inline-flex;align-items:center;gap:7px;min-height:40px;background:rgba(255,190,60,.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1.5px solid rgba(255,190,60,.5);border-radius:999px;color:#ffe6a3;font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:.5px;padding:8px 18px;white-space:nowrap;cursor:pointer;text-transform:none;box-shadow:0 0 16px rgba(255,190,60,.28);transition:transform .14s var(--spring),box-shadow .18s var(--ease-out),opacity .2s;" onmousedown="this.style.transform=&#39;scale(.95)&#39;" onmouseup="this.style.transform=&#39;&#39;" onmouseleave="this.style.transform=&#39;&#39;">' + hintBtnInner() + '</button>' +
       '</div>' +
+      '<div id="hintBanner" style="visibility:hidden;text-align:center;font-family:Rajdhani,sans-serif;font-size:14px;font-weight:600;color:#fff;background:rgba(255,190,60,.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1.5px solid rgba(255,190,60,.45);border-radius:12px;padding:8px 12px;margin-bottom:12px;min-height:40px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(255,190,60,.18);"></div>' +
       '<div class="board">' + rowsHtml + '</div>' +
       pauseOverlayHtml;
 
@@ -1242,8 +1335,45 @@
     state.hintsLeft -= 1;
     state.hintedIds[word.id] = true;
     var btn = document.getElementById("hintBtn");
-    if (btn) btn.textContent = "💡 " + state.hintsLeft;
+    if (btn) refreshHintBtn();
     flashHintBanner(word.en + " — " + word.hint, false);
+  }
+
+  // ---------- Telegram haptics (no-op outside Telegram) ----------
+  function tgHaptic(kind) {
+    try {
+      var h = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+      if (!h) return;
+      if (kind === "success") h.notificationOccurred("success");
+      else if (kind === "error") h.notificationOccurred("error");
+      else if (kind === "unlock") h.impactOccurred("heavy");
+      else h.impactOccurred("medium");
+    } catch (e) {}
+  }
+
+  // ---------- Hint button (lightbulb + dot progress) ----------
+  function hintDots(left, total) {
+    var out = "";
+    for (var i = 0; i < total; i++) {
+      var on = i < left;
+      out += '<span style="width:7px;height:7px;border-radius:50%;background:' +
+        (on ? '#ffd24a' : 'rgba(255,190,60,.22)') + ';box-shadow:' +
+        (on ? '0 0 6px rgba(255,200,0,.9)' : 'none') + ';"></span>';
+    }
+    return '<span style="display:inline-flex;gap:4px;align-items:center;">' + out + '</span>';
+  }
+  function hintBtnInner() {
+    return '<span style="font-size:17px;filter:drop-shadow(0 0 6px rgba(255,200,0,.8));">💡</span>' +
+      hintDots(state.hintsLeft, state.hintsTotal);
+  }
+  function refreshHintBtn() {
+    var btn = document.getElementById("hintBtn");
+    if (!btn) return;
+    btn.innerHTML = hintBtnInner();
+    var dead = state.hintsLeft <= 0;
+    btn.style.opacity = dead ? ".4" : "1";
+    btn.style.filter = dead ? "grayscale(.7)" : "none";
+    btn.style.cursor = dead ? "default" : "pointer";
   }
 
   function onCardClick(e) {
@@ -1294,7 +1424,7 @@
       state.matchedCount += 1;
       state.timeLeft = Math.min(MAX_TIME, state.timeLeft + TIME_BONUS);
       var justUnlocked = updateBestRoundScore(state.score);
-      if (justUnlocked.length) state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked);
+      if (justUnlocked.length) { state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked); tgHaptic("unlock"); }
 
       var item = state.board.filter(function (c) { return c.id === leftId; })[0];
       if (item) item.matched = true;
@@ -1302,6 +1432,7 @@
       rightBtn.classList.remove("selected");
       leftBtn.classList.add("correct");
       rightBtn.classList.add("correct");
+      tgHaptic("success");
       leftBtn.disabled = true;
       rightBtn.disabled = true;
       updateTimerDisplay();
@@ -1313,7 +1444,7 @@
         rightBtn.classList.remove("correct");
         leftBtn.classList.add("matched");
         rightBtn.classList.add("matched");
-      }, 100);
+      }, 320);
 
       var allMatched = state.board.every(function (c) { return c.matched; });
       if (allMatched) {
@@ -1327,6 +1458,7 @@
       state.timeLeft = Math.max(0, state.timeLeft - TIME_PENALTY);
       leftBtn.classList.add("wrong");
       rightBtn.classList.add("wrong");
+      tgHaptic("error");
       updateTimerDisplay();
       updateScoreDisplay();
       if (state.timeLeft <= 0) {
@@ -1339,7 +1471,7 @@
       setTimeout(function () {
         leftBtn.classList.remove("selected", "wrong");
         rightBtn.classList.remove("selected", "wrong");
-      }, 100);
+      }, 340);
     }
   }
 
