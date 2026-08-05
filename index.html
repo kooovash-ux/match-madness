@@ -705,12 +705,19 @@
   ];
   var LS_LIFETIME_SCORE = "mm_best_round_score";
   var LS_PUZZLE_PERMS = "mm_puzzle_perms";
+  var LS_TOTAL_MATCHED = "mm_total_matched_words"; // ever, across all games - never resets
 
   function loadLifetimeScore() {
     return parseInt(localStorage.getItem(LS_LIFETIME_SCORE) || "0", 10) || 0;
   }
   function saveLifetimeScore(v) {
     cloudSet(LS_LIFETIME_SCORE, String(v));
+  }
+  function loadTotalMatchedWords() {
+    return parseInt(localStorage.getItem(LS_TOTAL_MATCHED) || "0", 10) || 0;
+  }
+  function bumpTotalMatchedWords() {
+    cloudSet(LS_TOTAL_MATCHED, String(loadTotalMatchedWords() + 1));
   }
   var MAX_TOTAL_PIECES = PUZZLE_IMAGES.length * PUZZLE_PIECES; // caps progress at 3 full pictures
 
@@ -908,7 +915,7 @@
         '</div>' +
         '<div style="display:flex;gap:10px;width:100%;max-width:340px;">' +
           statCard(collected, "Картин собрано", "#ffd24a") +
-          statCard(loadLifetimeScore(), "Очков всего", "#a855f7") +
+          statCard(loadTotalMatchedWords(), "Смэтчено слов всего", "#a855f7") +
         '</div>' +
         '<button class="btn secondary" id="statsBackBtn">Назад</button>' +
       '</div>';
@@ -1422,6 +1429,7 @@
     if (isMatch) {
       state.score += SCORE_CORRECT;
       state.matchedCount += 1;
+      bumpTotalMatchedWords();
       state.timeLeft = Math.min(MAX_TIME, state.timeLeft + TIME_BONUS);
       var justUnlocked = updateBestRoundScore(state.score);
       if (justUnlocked.length) { state.sessionNewPieces = state.sessionNewPieces.concat(justUnlocked); tgHaptic("unlock"); }
