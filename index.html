@@ -563,16 +563,33 @@
   var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
   if (tg) { try { tg.ready(); } catch (e) {} }
 
+  // CloudStorage allows max 4096 chars per value, so long values (big custom
+  // word lists) are split into chunks: key~0, key~1, ... plus a counter key~n.
+  // Short values stay in the plain key (same as before), with key~n = "1".
+  var CLOUD_CHUNK = 3500;
   function cloudSet(key, value) {
     localStorage.setItem(key, value);
-    if (tg && tg.CloudStorage) {
-      try { tg.CloudStorage.setItem(key, value, function () {}); } catch (e) {}
-    }
+    if (!(tg && tg.CloudStorage)) return;
+    var noop = function () {};
+    try {
+      var n = Math.max(1, Math.ceil(value.length / CLOUD_CHUNK));
+      if (n === 1) {
+        tg.CloudStorage.setItem(key, value, noop);
+      } else {
+        for (var i = 0; i < n; i++) {
+          tg.CloudStorage.setItem(key + "~" + i, value.slice(i * CLOUD_CHUNK, (i + 1) * CLOUD_CHUNK), noop);
+        }
+      }
+      tg.CloudStorage.setItem(key + "~n", String(n), noop);
+    } catch (e) {}
   }
   function cloudRemove(key) {
     localStorage.removeItem(key);
     if (tg && tg.CloudStorage) {
-      try { tg.CloudStorage.removeItem(key, function () {}); } catch (e) {}
+      try {
+        tg.CloudStorage.removeItem(key, function () {});
+        tg.CloudStorage.removeItem(key + "~n", function () {});
+      } catch (e) {}
     }
   }
   // Pulls the latest values from the Telegram account into localStorage before
@@ -582,16 +599,34 @@
     var finished = false;
     var finish = function () { if (!finished) { finished = true; done(); } };
     try {
-      tg.CloudStorage.getItems(keys, function (err, values) {
-        if (!err && values) {
-          keys.forEach(function (k) {
-            if (values[k]) localStorage.setItem(k, values[k]);
-          });
-        }
-        finish();
+      var firstKeys = keys.concat(keys.map(function (k) { return k + "~n"; }));
+      tg.CloudStorage.getItems(firstKeys, function (err, values) {
+        if (err || !values) { finish(); return; }
+        var chunkKeys = [];
+        var chunked = {};
+        keys.forEach(function (k) {
+          var n = parseInt(values[k + "~n"] || "1", 10) || 1;
+          if (n > 1) {
+            chunked[k] = n;
+            for (var i = 0; i < n; i++) chunkKeys.push(k + "~" + i);
+          } else if (values[k]) {
+            localStorage.setItem(k, values[k]);
+          }
+        });
+        if (!chunkKeys.length) { finish(); return; }
+        tg.CloudStorage.getItems(chunkKeys, function (err2, cv) {
+          if (!err2 && cv) {
+            Object.keys(chunked).forEach(function (k) {
+              var s = "";
+              for (var i = 0; i < chunked[k]; i++) s += (cv[k + "~" + i] || "");
+              if (s) localStorage.setItem(k, s);
+            });
+          }
+          finish();
+        });
       });
     } catch (e) { finish(); }
-    setTimeout(finish, 1500); // don't block startup if Telegram is slow/unavailable
+    setTimeout(finish, 3000); // don't block startup if Telegram is slow/unavailable
   }
 
   var LS_CUSTOM = "mm_custom_words";
@@ -860,6 +895,7 @@
     settingsTab: "add",
     sessionNewPieces: [],
     paused: false,
+    bulkMessage: null,
     hintsLeft: 0,
     hintsTotal: 0,
     hintMessage: null, // {en, hint} currently shown, or null
@@ -1612,9 +1648,10 @@
         '</div>';
     } else if (tab === "bulk") {
       body =
-        '<p style="font-size:13px;color:#777;">По одной паре на строку, формат: слово - перевод</p>' +
+        '<p style="font-size:13px;color:#777;">По одной паре на строку. Разделитель: тире (-, —), двоеточие, «=», «;» или Tab (из Excel).</p>' +
         '<textarea id="bulkInput" placeholder="dog - собака\ncat - кошка"></textarea>' +
-        '<button class="btn small" id="bulkAddBtn" style="width:auto;margin-top:8px;">Импортировать</button>';
+        '<button class="btn small" id="bulkAddBtn" style="width:auto;margin-top:8px;">Импортировать</button>' +
+        (state.bulkMessage ? '<p style="font-size:13px;color:var(--cyan);margin-top:8px;">' + escapeHtml(state.bulkMessage) + '</p>' : '');
     } else if (tab === "rejected") {
       body =
         '<h3>Убранные слова (' + rejected.length + ')</h3>' +
@@ -1645,6 +1682,7 @@
     Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (btn) {
       btn.onclick = function () {
         state.settingsTab = btn.getAttribute("data-tab");
+        state.bulkMessage = null;
         render();
       };
     });
@@ -1683,26 +1721,34 @@
     } else if (tab === "bulk") {
       document.getElementById("bulkAddBtn").onclick = function () {
         var text = document.getElementById("bulkInput").value;
-        var lines = text.split("\n");
+        var lines = text.split(/\r\n|\r|\n/);
         var list = loadCustomWords();
-        var added = 0;
+        var seen = {};
+        list.forEach(function (w) { seen[w.en.toLowerCase()] = true; });
+        var added = 0, dupes = 0, bad = 0;
+        // Tried in order; the line is split at the FIRST hit, so the translation
+        // may itself contain hyphens ("t-shirt - футболка" works).
+        var SEPS = ["\t", " - ", " — ", " – ", " -", "- ", "—", "–", " = ", "=", " : ", ":", ";", "-"];
         lines.forEach(function (line) {
           line = line.trim();
           if (!line) return;
-          var parts = line.split(/\s+-\s+/);
-          if (parts.length !== 2) {
-            parts = line.split("-");
-          }
-          if (parts.length === 2) {
-            var en = parts[0].trim();
-            var ru = parts[1].trim();
-            if (en && ru) {
-              list.push({ en: en, ru: ru });
-              added++;
+          var en = "", ru = "";
+          for (var s = 0; s < SEPS.length; s++) {
+            var idx = line.indexOf(SEPS[s]);
+            if (idx > 0) {
+              var a = line.slice(0, idx).trim();
+              var b = line.slice(idx + SEPS[s].length).trim();
+              if (a && b) { en = a; ru = b; break; }
             }
           }
+          if (!en) { bad++; return; }
+          if (seen[en.toLowerCase()]) { dupes++; return; }
+          seen[en.toLowerCase()] = true;
+          list.push({ en: en, ru: ru });
+          added++;
         });
         saveCustomWords(list);
+        state.bulkMessage = null;
         render();
       };
     } else if (tab === "rejected") {
